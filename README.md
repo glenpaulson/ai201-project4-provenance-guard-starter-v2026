@@ -36,8 +36,55 @@
 
 ## What This Does
 
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
+Provenance Guard is a small service a writing site could call when somebody
+posts something. Text goes in, and a sentence a real person can read comes
+back, along with the numbers behind it and a way to argue.
+
+Here is the path one submission takes, from arriving to the label a reader
+sees.
+
+1. **The site sends it in.** A POST to `/submit` carrying the writing (`text`)
+   and who submitted it (`creator_id`).
+
+2. **The handler checks it is worth scoring.** `app.py::check_text` refuses
+   text that is missing, empty, not a string, over 20,000 characters or under
+   40. A refusal comes back as a 400 with a readable message, and gets written
+   to the log, so a run of bad requests is not invisible. Then
+   `app.py::submit` makes a `content_id`, which is the only handle anyone has
+   on this decision afterwards.
+
+3. **Signal one reads it.** `detector.py::model_signal` runs a small language
+   model on this machine and returns 0 to 1, higher meaning more likely
+   machine written. It is measuring how easy the writing is to guess.
+
+4. **Signal two measures it.** `stylometry.py::style_signal` never reads the
+   meaning. It measures the shape: how much sentence lengths vary, how much
+   vocabulary repeats, how much optional punctuation there is. Same 0 to 1
+   scale, same direction.
+
+5. **Two numbers become one.** `scoring.py::combine_signals` takes a weighted
+   average, then slides the answer toward whichever signal reads more human,
+   by an amount that grows with how far apart the two are. Disagreement is
+   treated as a reason for doubt, and the doubt goes to the writer.
+
+6. **The score becomes words.** `scoring.py::score_to_label` turns that one
+   number into one of three labels and the exact sentence a person reads. A
+   score of 0.62 means nothing to a writer. The sentence is the part that does.
+
+7. **It gets written down before it goes out.** `audit.py::log_decision`
+   appends one line to `logs/audit.jsonl` with the time, the content id, the
+   creator, both signal scores, the combined score, the label and a status of
+   `decided`.
+
+8. **The service answers**, and the site shows the writer the sentence.
+
+9. **If they disagree**, they send the `content_id` and their reasoning to
+   `/appeal`. The id is checked against the log, a 404 comes back if it is not
+   there, and otherwise `audit.py::log_appeal` writes a second line moving the
+   status to `under_review`. Nothing is scored again. The log is append only,
+   so the original decision stays exactly where it was and the appeal sits
+   after it. Anyone reading later sees what was decided, that it was
+   challenged, and in what order.
 
 
 
@@ -51,7 +98,7 @@
      The blind spot is not optional. If you can't name it you don't understand
      the signal yet — and unit 8's attack set is built out of blind spots. -->
 
-### Signal one — the model signal
+### Signal one: the model signal
 
 **Where it lives:** `detector.py::model_signal`
 
@@ -75,7 +122,7 @@ It fails the other way too. Taking text I know a machine wrote and misspelling
 four words dropped it from **0.8539 to 0.4915**, below my genuinely human
 sample. The edit took under a minute and changed nothing about who wrote it.
 
-### Signal two — the style signal
+### Signal two: the style signal
 
 **Where it lives:** `stylometry.py::style_signal`
 
@@ -394,17 +441,57 @@ invisible:
 
 ## How I Used AI
 
-**Moment 1**
+I used Claude throughout this build. These are the two moments where what it
+gave me and what I shipped were different, and why.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 1: the weights on my style signal**
 
-**Moment 2**
+- *What I asked for:* how to turn my three style measures (sentence length
+  spread, type token ratio, punctuation density) into one 0 to 1 score, given
+  that they are on completely different scales.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What came back:* scale each one onto 0 to 1 using a pair of anchor points,
+  flip them so higher means more machine like, then take a weighted average.
+  The scaling idea was right and I kept it. The weighting was the ordinary
+  one, roughly equal across all three.
+
+- *What I changed:* I ran my five calibration texts before choosing any
+  weights, and type token ratio turned out to be useless. It scored **0.792**
+  on text I know was machine generated and **0.804** on text I know a person
+  wrote. That is a difference of 0.012 on a measure that runs 0 to 1. With
+  equal weights, a measure that separates nothing would have been a third of
+  my second signal.
+
+  I dropped it to 0.2 and wrote down in `notes.md` that it does not work,
+  rather than quietly tuning its anchors until the numbers looked better. The
+  other two went to 0.4 each, because both showed a real gap. A model will
+  give you a sensible default structure. It cannot tell you which of your
+  measures actually does anything on your text, because it has not seen your
+  text.
+
+**Moment 2: the thresholds, where I took the advice and then threw it out**
+
+- *What I asked for:* my plain human writing sample was being labelled as
+  machine written. What should I do about it?
+
+- *What came back:* widen the unsure band, which is the standard answer. Fewer
+  wrong accusations, more generated text getting through, and that trade is
+  the one this project is about.
+
+- *What I changed:* I worked out what each setting would do to my calibration
+  texts before editing `config.py`, and the advice turned out to be wrong for
+  my service specifically. **My plain human sample scores 0.8151, and my
+  clearly machine written sample scores 0.7110.** The writer I was trying to
+  protect scores higher than the thing I am trying to catch. Moving the line to
+  0.75 would stop me catching machine writing and still accuse her, which is
+  worse on both counts at once. Moving it to 0.82 would rescue her by making
+  the machine label effectively unreachable.
+
+  So I changed nothing, and wrote down why instead. A threshold decides where
+  to cut a ranking and cannot fix a ranking that is in the wrong order. The
+  advice was good general advice that happened not to survive contact with my
+  own numbers, and the only reason I found that out is that I checked before
+  editing rather than after.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
