@@ -124,12 +124,49 @@
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text": "My bike chain snapped two miles from home, in the rain, outside a shut pub. I walked it back. Halfway there a man in a Vauxhall slowed down, looked at me, and drove off. Fine. Great. I have since bought a chain tool and I carry it everywhere, including to work, where there is no bike.", "creator_id": "glen"}'
 ```
 
 ```json
-
+{
+  "confidence": 0.5088,
+  "content_id": "0230c5e8-931a-4daa-b114-4766d4911db7",
+  "guess": "unsure",
+  "label": "PLACEHOLDER, written in Milestone 5.",
+  "model_score": 0.5088,
+  "style_score": null
+}
 ```
+
+<!-- Milestone 3 only. style_score is null and the label is a placeholder
+     because signal two and the label mapping are not built yet. This block
+     gets replaced once they are. -->
+
+**A refused submission**
+
+Criterion 5 says bad input comes back as a 400 with an `error` field, never a
+500, and never takes more than 10 seconds. All four cases, with timings:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "", "creator_id": "bad2"}'
+```
+
+```json
+HTTP 400 in 0.0027s
+{
+  "error": "empty_text",
+  "message": "The 'text' field is empty. There is nothing to check."
+}
+```
+
+| What I sent | Status | Time | `error` |
+|---|---|---|---|
+| no `text` field at all | 400 | 0.0039s | `missing_text` |
+| `text` is `""` | 400 | 0.0027s | `empty_text` |
+| `text` is `null` | 400 | 0.0025s | `missing_text` |
+| `text` is 50,000 words | 400 | 0.042s | `text_too_long` |
 
 **An appeal**
 
@@ -150,7 +187,29 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
 ```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "combined_score": 0.5088,
+      "content_id": "0230c5e8-931a-4daa-b114-4766d4911db7",
+      "creator_id": "glen",
+      "guess": "unsure",
+      "label": "PLACEHOLDER, written in Milestone 5.",
+      "model_score": 0.5088,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-02T05:04:54+00:00"
+    }
+  ]
+}
+```
 
+A refused submission gets written down too, so a run of bad requests is not
+invisible:
+
+```json
+{"timestamp": "2026-11-02T05:04:35+00:00", "creator_id": "bad4", "event": "rejected", "status": "rejected", "reason": "text_too_long"}
 ```
 
 ---

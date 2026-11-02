@@ -150,6 +150,57 @@ def health():
 
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
+def check_text(text) -> dict | None:
+    """
+    Decide whether this is something I am willing to score.
+
+    Returns None when the text is fine, or the error body to send back when it
+    is not. Keeping it in one place means /submit has one way of saying no,
+    and every way of saying no looks the same to whoever is reading the answer.
+
+    These four cases are exactly the ones my criterion 5 names.
+    """
+    if text is None:
+        return {
+            "error": "missing_text",
+            "message": "Send a 'text' field with the writing you want checked.",
+        }
+
+    if not isinstance(text, str):
+        return {
+            "error": "text_not_a_string",
+            "message": f"'text' has to be a string, not {type(text).__name__}.",
+        }
+
+    if not text.strip():
+        return {
+            "error": "empty_text",
+            "message": "The 'text' field is empty. There is nothing to check.",
+        }
+
+    if len(text) > config.MAX_TEXT_CHARS:
+        return {
+            "error": "text_too_long",
+            "message": (
+                f"That is {len(text):,} characters and the limit is "
+                f"{config.MAX_TEXT_CHARS:,}. Only the opening few hundred words "
+                f"get read anyway, so send a shorter piece."
+            ),
+        }
+
+    if len(text.strip()) < config.MIN_TEXT_CHARS:
+        return {
+            "error": "text_too_short",
+            "message": (
+                f"That is {len(text.strip())} characters and I need at least "
+                f"{config.MIN_TEXT_CHARS}. A few sentences, so there is "
+                f"something to measure."
+            ),
+        }
+
+    return None
+
+
 @app.post("/submit")
 # @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
@@ -199,17 +250,74 @@ def submit():
     what should this do when `text` is missing, empty, or enormous? A crash on
     a malformed input is one of the most common real failures there is.
     """
-    payload = request.get_json(silent=True) or {}
+    import detector
 
-    # TODO: delete this and build the route.
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+
+    text = payload.get("text")
+    creator_id = payload.get("creator_id") or "unknown"
+
+    # Check the input before doing any work. My criterion 5 says a bad request
+    # comes back as a 400 with an error field, never a 500, and never takes
+    # more than 10 seconds. The only way to keep that promise is to say no
+    # before the text ever reaches the model.
+    problem = check_text(text)
+    if problem:
+        audit.log_rejection(creator_id=creator_id, reason=problem["error"])
+        return jsonify(problem), 400
+
+    # Make the id first. It is the only handle the writer has on this decision,
+    # and /appeal needs it later.
+    content_id = str(uuid.uuid4())
+
+    # Signal one. This is the only signal so far. Signal two comes in
+    # Milestone 4, and so does the real score.
+    try:
+        model_score = detector.model_signal(text)
+    except detector.DetectorUnavailable as exc:
+        audit.log_rejection(creator_id=creator_id, reason="detector_unavailable")
+        return jsonify({
+            "error": "detector_unavailable",
+            "message": f"The detector could not run: {exc}",
+        }), 503
+    except ValueError as exc:
+        # The model needs a few tokens before it can be surprised by anything.
+        audit.log_rejection(creator_id=creator_id, reason="text_too_short_to_score")
+        return jsonify({
+            "error": "text_too_short_to_score",
+            "message": str(exc),
+        }), 400
+
+    # Placeholders until Milestone 4 and 5. Written down as placeholders on
+    # purpose, so nothing downstream reads them as a real answer.
+    style_score = None
+    confidence = model_score
+    guess = "unsure"
+    label = "PLACEHOLDER, written in Milestone 5."
+
+    # Write it down before answering. A decision that is not in the log is a
+    # decision nobody can check later.
+    audit.log_decision(
+        content_id=content_id,
+        creator_id=creator_id,
+        guess=guess,
+        model_score=model_score,
+        style_score=style_score,
+        combined_score=confidence,
+        label=label,
+        status="decided",
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /submit isn't built yet — see the TODO in app.py.",
-        "you_sent": {
-            "text_length": len(payload.get("text", "")),
-            "creator_id": payload.get("creator_id"),
-        },
-    }), 501
+        "content_id": content_id,
+        "guess": guess,
+        "confidence": confidence,
+        "label": label,
+        "model_score": model_score,
+        "style_score": style_score,
+    })
 
 
 @app.post("/appeal")

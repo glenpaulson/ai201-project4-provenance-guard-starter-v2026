@@ -46,6 +46,22 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 # 300 words, which is enough for the signal to mean something.
 DETECTOR_MAX_TOKENS = 400
 
+# The longest submission /submit will accept, in characters. Anything bigger
+# gets a 400 instead of being scored.
+#
+# My criterion 5 says a huge submission has to be refused in under 10 seconds.
+# This is how. Since DETECTOR_MAX_TOKENS above means I only ever read the first
+# 400 tokens anyway, accepting a giant body buys me no extra accuracy at all.
+# It just hands anybody a free way to make my service slow for everyone else.
+# 20,000 characters is roughly 3,000 words, far more than any blog post needs.
+MAX_TEXT_CHARS = 20_000
+
+# The shortest submission worth scoring. The model needs at least a few tokens
+# before "how surprised was it" means anything, and detector.perplexity raises
+# on anything under 3 tokens. Catching it here gives the writer a clear message
+# instead of a crash.
+MIN_TEXT_CHARS = 40
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.

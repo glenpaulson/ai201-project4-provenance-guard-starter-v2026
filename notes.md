@@ -192,3 +192,33 @@ not invisible.
 **When it goes wrong (404):** the `content_id` is not in the log. Comes back
 with `error` and `message`. A typo here would otherwise fail silently and look
 like a broken endpoint.
+
+---
+
+# Milestone 3 notes: signal one on its own
+
+Before wiring anything into the route I ran `detector.py` on three pieces of
+text by hand, so I would know what the signal does before I could blame the
+route for it.
+
+| What I sent | perplexity | model_signal |
+|---|---|---|
+| Something I am sure is AI generated | 14.9 | **0.8539** |
+| Something I am sure is human, written with a real voice | 44.0 | **0.5088** |
+| Plain, ordinary human writing (the Maya case from Milestone 1) | 23.5 | **0.7383** |
+
+**What this tells me, and I did not expect it to be this clean.**
+
+In Milestone 1 I guessed plain human writing would score about 0.78 on this
+signal. It scored 0.7383. My AI threshold is 0.65, so signal one on its own
+already calls that writer a machine. The blind spot I wrote down on paper is
+not a theory. It is sitting in my own test output on the first day.
+
+The second row is the one that worries me more. Writing with an actual voice in
+it, which is as human as anything I have, only reaches 0.5088. That is not
+"this is a person". That is "I have no idea". So on this signal the gap between
+obviously human writing and obviously machine writing is only about 0.35, and
+plain human writing sits on the wrong side of it.
+
+Signal one cannot carry this on its own, which is the whole reason there is a
+Milestone 4.
