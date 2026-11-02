@@ -130,12 +130,36 @@ def score_to_label(score: float) -> tuple[str, str]:
     think if they got it on their own work. That question is the whole
     milestone.
     """
-    # TODO: replace this — thresholds are in config.py
+    # Each of these is written for the person who gets it, not for me. None of
+    # them use the word threshold, or score, or confidence, or a number of any
+    # kind. A writer who reads one of these should be able to tell what it
+    # means about them and what happens next, without knowing anything at all
+    # about how this service works.
+
     if score >= config.AI_THRESHOLD:
-        return "ai", "PLACEHOLDER — write the high-confidence AI label."
+        return "ai", (
+            "Our checks suggest this was written by a computer rather than by "
+            "you. We can be wrong about this, and these checks cannot prove "
+            "who wrote anything. If you wrote this yourself, tell us and a "
+            "person will read it."
+        )
+
     if score <= config.HUMAN_THRESHOLD:
-        return "human", "PLACEHOLDER — write the high-confidence human label."
-    return "unsure", "PLACEHOLDER — write the unsure label."
+        return "human", (
+            "We checked this piece and found nothing that looks like computer "
+            "writing. As far as we can tell, you wrote it yourself."
+        )
+
+    # The hard one. It has to admit that I do not know, without the person
+    # reading it feeling accused, because they may well have written every
+    # word. So it says the thing a worried writer actually wants to know
+    # first: nothing is happening to you.
+    return "unsure", (
+        "We could not tell whether a person or a computer wrote this, so we "
+        "are not going to say either way. This is not a finding against you. "
+        "Your post stays exactly where it is and nothing about it has been "
+        "reported to anyone."
+    )
 
 
 def label_ranges() -> list[tuple[str, str]]:

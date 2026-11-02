@@ -301,9 +301,9 @@ def submit():
     # scoring.py::combine_signals.
     confidence = scoring.combine_signals(model_score, style_score)
 
-    # Still a placeholder, on purpose. The label mapping is Milestone 5.
-    guess = "unsure"
-    label = "PLACEHOLDER, written in Milestone 5."
+    # One number becomes something a person can read. A score of 0.62 means
+    # nothing to a writer. The sentence is the part that does.
+    guess, label = scoring.score_to_label(confidence)
 
     # Write it down before answering. A decision that is not in the log is a
     # decision nobody can check later.
@@ -348,14 +348,65 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
 
-    # TODO: delete this and build the route.
+    content_id = payload.get("content_id")
+    reasoning = payload.get("reasoning")
+
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({
+            "error": "missing_content_id",
+            "message": "Send the content_id you got back when you submitted.",
+        }), 400
+
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return jsonify({
+            "error": "missing_reasoning",
+            "message": "Tell us why you think this is wrong.",
+        }), 400
+
+    # Does this piece actually exist? My criterion 4 says an appeal against an
+    # id I have never seen gets a 404, and this is why: if a mistyped id came
+    # back with a cheerful 200, the writer would walk away believing their
+    # appeal had been recorded when nothing had been written down anywhere.
+    # That failure is silent on both ends, which makes it the worst kind.
+    existing = audit.entries_for(content_id)
+    if not existing:
+        return jsonify({
+            "error": "unknown_content_id",
+            "message": (
+                f"No submission with the id '{content_id}'. Check the "
+                f"content_id from the response when you submitted."
+            ),
+        }), 404
+
+    # Take the creator from the original decision rather than from the appeal.
+    # Whoever is appealing does not get to tell me whose work this was.
+    creator_id = existing[0].get("creator_id", "unknown")
+
+    # Append the appeal next to the original decision. This does not overwrite
+    # the decision and it does not score anything again. The log is append
+    # only, so the original stays exactly where it was and the appeal sits
+    # after it. Someone reading later sees what was decided, that it was
+    # challenged, and in what order.
+    entry = audit.log_appeal(
+        content_id=content_id,
+        creator_id=creator_id,
+        reasoning=reasoning,
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": "under_review",
+        "message": (
+            "Thank you. Your appeal has been recorded and this piece is now "
+            "waiting for a person to look at it. Nothing further happens to "
+            "your post in the meantime."
+        ),
+        "recorded_at": entry["timestamp"],
+    })
 
 
 # ── Already works ─────────────────────────────────────────────────────────────

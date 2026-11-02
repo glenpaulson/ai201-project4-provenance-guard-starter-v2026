@@ -175,14 +175,69 @@ to come from the thresholds, not from here.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 to 0.35 | We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself. |
+| unsure | 0.35 to 0.65 | We could not tell whether a person or a computer wrote this, so we are not going to say either way. This is not a finding against you. Your post stays exactly where it is and nothing about it has been reported to anyone. |
+| high-confidence AI | 0.65 to 1.00 | Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it. |
+
+None of the three contain a number, a percentage, or the words score,
+threshold or confidence. A writer should be able to tell what the message means
+about them and what happens next without knowing anything about how this
+service works.
+
+**All three are reachable**, checked by sending real text through the running
+service rather than by reading the ranges and assuming:
+
+| What I sent | Score | Label it produced |
+|---|---|---|
+| My own writing, with a real voice in it | 0.1928 | high-confidence human |
+| Formal human writing | 0.4778 | unsure |
+| Text I know was machine generated | 0.7110 | high-confidence AI |
 
 **Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
+
+This was the hardest of the three to write, and the reason is that the person
+most likely to read it is a person who wrote every word themselves.
+
+My first attempt said we were not sure whether this was written by a computer.
+Reading it back as the writer, that is not a neutral statement. It is an
+accusation with a hedge in front of it, because it leaves the suspicion sitting
+there and says nothing about what follows. Somebody who has done nothing wrong
+reads that and immediately wants to know what is going to happen to them.
+
+So the version I shipped answers that question before they have to ask it. It
+says plainly that this is not a finding against them, that the post stays where
+it is, and that nothing has been reported to anyone. The uncertainty is still
+admitted, because it is real and hiding it would be worse, but the sentence
+does not leave the reader to guess what it costs them. The honest answer is
+that it costs them nothing, so the label says so.
+
+**On the thresholds:** they are 0.35 and 0.65, unchanged from the starter, and
+I kept them deliberately rather than by not getting round to it. The reason is
+in the next section.
+
+### Why widening the unsure band would not have helped
+
+The obvious move, given everything above, is to widen the unsure band so that
+plain human writing stops being accused. I tried it on paper before changing
+anything, and it does not work:
+
+| If the AI line is | clearly AI (0.7110) | plain human (0.8151) |
+|---|---|---|
+| 0.65 (what I shipped) | caught | **accused** |
+| 0.75 | missed | **accused** |
+| 0.82 | missed | saved |
+
+**Plain human writing scores higher than the text I know a machine wrote.** No
+cutoff anywhere puts those two on the sides I want, because they are in the
+wrong order to start with. Moving the line to 0.75 gives up catching machine
+writing and still accuses the writer, which is the worst of both. Moving it to
+0.82 rescues the writer by making the AI label effectively unreachable for
+actual AI text.
+
+A threshold decides where to cut a ranking. It cannot fix a ranking that is
+wrong, and mine is wrong: both of my signals rate plain human writing as more
+machine-like than machine writing. The fix has to be upstream, in how the style
+signal treats short even sentences, and that is what I would spend next unit on.
 
 
 
@@ -200,26 +255,30 @@ to come from the thresholds, not from here.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
+This is the false positive from Milestone 1, running for real. A writer submits
+her own work, in plain English, with short sentences because English is her
+second language. My service accuses her.
+
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "My bike chain snapped two miles from home, in the rain, outside a shut pub. I walked it back. Halfway there a man in a Vauxhall slowed down, looked at me, and drove off. Fine. Great. I have since bought a chain tool and I carry it everywhere, including to work, where there is no bike.", "creator_id": "glen"}'
+  -d '{"text": "To fix a bike chain you need a chain tool. First you must find the broken link. Then you push the pin out with the tool. After that you can remove the bad link. Then you join the two ends together again. It is not hard but you need the right tool.", "creator_id": "maya"}'
 ```
 
 ```json
 {
-  "confidence": 0.5088,
-  "content_id": "0230c5e8-931a-4daa-b114-4766d4911db7",
-  "guess": "unsure",
-  "label": "PLACEHOLDER, written in Milestone 5.",
-  "model_score": 0.5088,
-  "style_score": null
+  "confidence": 0.8151,
+  "content_id": "d6b69630-042d-42dc-a98e-52483870c95e",
+  "guess": "ai",
+  "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+  "model_score": 0.7383,
+  "style_score": 0.9415
 }
 ```
 
-<!-- Milestone 3 only. style_score is null and the label is a placeholder
-     because signal two and the label mapping are not built yet. This block
-     gets replaced once they are. -->
+Both signal scores are in the response, not only in the log. Both are high, so
+my combining rule has no disagreement to lean on, and the score comes out at
+0.8151. That is a real writer being told a machine wrote her work.
 
 **A refused submission**
 
@@ -249,15 +308,42 @@ HTTP 400 in 0.0027s
 
 **An appeal**
 
+She reads the label, and does the only thing it leaves her:
+
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+  -d '{"content_id": "d6b69630-042d-42dc-a98e-52483870c95e", "reasoning": "I wrote every word of this myself. English is my second language so I keep my sentences short."}'
 ```
 
 ```json
-
+{
+  "content_id": "d6b69630-042d-42dc-a98e-52483870c95e",
+  "message": "Thank you. Your appeal has been recorded and this piece is now waiting for a person to look at it. Nothing further happens to your post in the meantime.",
+  "recorded_at": "2026-11-02T05:14:31+00:00",
+  "status": "under_review"
+}
 ```
+
+**An appeal against an id that does not exist**
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id": "typo-not-a-real-id", "reasoning": "I wrote this"}'
+```
+
+```json
+HTTP 404
+{
+  "error": "unknown_content_id",
+  "message": "No submission with the id 'typo-not-a-real-id'. Check the content_id from the response when you submitted."
+}
+```
+
+A mistyped id has to fail loudly. If it came back with a cheerful 200 the
+writer would walk away believing their appeal had been recorded when nothing
+had been written down anywhere, and neither of us would ever find out.
 
 **What the log shows afterwards**
 
@@ -267,22 +353,35 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 
 ```json
 {
-  "count": 1,
+  "count": 2,
   "entries": [
     {
-      "combined_score": 0.5088,
-      "content_id": "0230c5e8-931a-4daa-b114-4766d4911db7",
-      "creator_id": "glen",
-      "guess": "unsure",
-      "label": "PLACEHOLDER, written in Milestone 5.",
-      "model_score": 0.5088,
+      "combined_score": 0.8151,
+      "content_id": "d6b69630-042d-42dc-a98e-52483870c95e",
+      "creator_id": "maya",
+      "guess": "ai",
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "model_score": 0.7383,
       "status": "decided",
-      "style_score": null,
-      "timestamp": "2026-11-02T05:04:54+00:00"
+      "style_score": 0.9415,
+      "timestamp": "2026-11-02T05:14:31+00:00"
+    },
+    {
+      "content_id": "d6b69630-042d-42dc-a98e-52483870c95e",
+      "creator_id": "maya",
+      "event": "appeal",
+      "reasoning": "I wrote every word of this myself. English is my second language so I keep my sentences short.",
+      "status": "under_review",
+      "timestamp": "2026-11-02T05:14:31+00:00"
     }
   ]
 }
 ```
+
+The decision is still there, unchanged, with the appeal sitting after it. The
+log is append only, so nothing overwrites anything. Someone reading this later
+can see what was decided, that it was challenged, and in what order. The status
+on the piece has moved from `decided` to `under_review`.
 
 A refused submission gets written down too, so a run of bad requests is not
 invisible:

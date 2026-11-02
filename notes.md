@@ -315,3 +315,73 @@ writer not.
 
 Whatever protection row 3 gets has to come from the thresholds in Milestone 5,
 and I already know it will cost me on the other side.
+
+---
+
+# Milestone 5 notes: the label and the appeal
+
+## The thresholds, and why I did not move them
+
+I expected to widen the unsure band here. Everything in Milestone 4 pointed at
+it: plain human writing was getting accused, and widening the band is the
+standard way to buy fewer wrong accusations. So before touching anything I
+worked out what each setting would actually do to my five calibration texts.
+
+| AI line | clearly AI (0.7110) | plain human (0.8151) |
+|---|---|---|
+| 0.65 | caught | accused |
+| 0.75 | missed | accused |
+| 0.82 | missed | saved |
+| 0.85 | missed | saved |
+
+The plain human writer scores **higher** than the text I know a machine wrote.
+0.8151 against 0.7110. They are in the wrong order, so there is no line
+anywhere that puts them on the sides I want.
+
+Moving to 0.75 is the worst option available: I stop catching machine writing
+and still accuse the writer. Moving to 0.82 saves her by making the AI label
+effectively dead for real AI text.
+
+So I kept 0.35 and 0.65. **A threshold decides where to cut a ranking and
+cannot fix a ranking that is wrong.** Mine is wrong, and the place to fix it is
+the style signal, which rates short even sentences as the single most machine
+like thing it can see. That is next unit's work, and I now know what to point
+it at.
+
+## Writing the unsure label
+
+My first version said we were not sure whether a computer wrote this.
+
+I read it back pretending I was the writer, which is what the milestone asks
+for, and it is not a neutral sentence. It is an accusation with a hedge in
+front of it. It leaves the suspicion sitting there and says nothing about what
+happens next, so a person who did nothing wrong reads it and immediately starts
+worrying about their account.
+
+The version I shipped answers that question before they have to ask it: this is
+not a finding against you, the post stays where it is, nothing has been
+reported. The uncertainty is still admitted, because it is real and hiding it
+would be worse. But the reader is not left to guess what it costs them, because
+the honest answer is nothing, and the label should say so.
+
+None of my three labels contain a number, a percentage, or the words score,
+threshold or confidence.
+
+## What the appeal does and does not do
+
+It records the writer's reasoning, moves the status to `under_review`, and
+waits for a person. It does not score anything again, and I did not build that
+on purpose. Rechecking automatically would run the same two signals that got it
+wrong the first time and return the same answer, which would look like a second
+opinion while being nothing of the sort.
+
+Two small decisions in there worth naming:
+
+**The creator comes from the original decision, not from the appeal.** Whoever
+is sending the appeal does not get to tell me whose work it was.
+
+**A content id I have never seen gets a 404, not a 200.** If a mistyped id came
+back cheerful, the writer would believe their appeal was recorded when nothing
+had been written anywhere, and neither of us would ever find out. That is the
+quietest possible failure in the whole service, and it sits on the one path
+that exists to catch my mistakes.
