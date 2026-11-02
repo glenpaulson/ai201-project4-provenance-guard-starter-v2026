@@ -73,6 +73,35 @@ MIN_TEXT_CHARS = 40
 WEIGHT_MODEL_SIGNAL = 0.5
 WEIGHT_STYLE_SIGNAL = 0.5
 
+# I left these equal, and that is a decision rather than me not getting round
+# to it. On my five calibration texts the style signal actually separated
+# clearly AI from clearly human better than the model signal did (a gap of
+# 0.54 against 0.35). I did not promote it for that, because it is also the
+# signal I can break in about a minute with a keyboard: adding typos and
+# chopping sentences up moved it by 0.14 on its own. Neither signal earned the
+# right to outvote the other, so the work gets done by the rule below instead.
+
+# ─── How much disagreement bends the result (Milestone 4) ────────────────────
+# My combining rule is a weighted average that then slides toward whichever
+# signal reads more human, by an amount that grows with how far apart the two
+# signals are.
+#
+# The reasoning is the one from Milestone 1: on a writing site the two kinds of
+# mistake do not cost the same. When my two signals cannot agree with each
+# other, I would rather be wrong in the direction that does not accuse anybody.
+
+# The gap between the two signals at which the lean is at its strongest. Half
+# the whole scale. Two signals further apart than this are not disagreeing,
+# they are measuring different things.
+FULL_DISAGREEMENT = 0.5
+
+# How far the result can slide toward the kinder signal when the two are fully
+# apart. 0.0 would mean the disagreement rule does nothing and this is just a
+# weighted average. 1.0 would mean a disagreement throws away the harsher
+# signal completely, which is too much: one signal shouting "machine" is still
+# evidence. 0.6 leans hard without ignoring it.
+MAX_LEAN = 0.6
+
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
 # Where one label becomes another. Scores run 0.0 (confidently human) to 1.0

@@ -4,3 +4,4 @@
 {"timestamp": "2026-11-02T05:04:35+00:00", "creator_id": "bad3", "event": "rejected", "status": "rejected", "reason": "missing_text"}
 {"timestamp": "2026-11-02T05:04:35+00:00", "creator_id": "bad4", "event": "rejected", "status": "rejected", "reason": "text_too_long"}
 {"timestamp": "2026-11-02T05:04:54+00:00", "content_id": "0230c5e8-931a-4daa-b114-4766d4911db7", "creator_id": "glen", "guess": "unsure", "model_score": 0.5088, "style_score": null, "combined_score": 0.5088, "label": "PLACEHOLDER, written in Milestone 5.", "status": "decided"}
+{"timestamp": "2026-11-02T05:10:52+00:00", "content_id": "2c7d5458-f336-45b3-993f-da1b92ce9331", "creator_id": "maya", "guess": "unsure", "model_score": 0.7383, "style_score": 0.9415, "combined_score": 0.8151, "label": "PLACEHOLDER, written in Milestone 5.", "status": "decided"}

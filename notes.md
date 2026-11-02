@@ -222,3 +222,96 @@ plain human writing sits on the wrong side of it.
 
 Signal one cannot carry this on its own, which is the whole reason there is a
 Milestone 4.
+
+---
+
+# Milestone 4 notes: both signals, and the rule that joins them
+
+## The calibration run
+
+Five pieces of text, measured before I chose a single number. Raw measures
+first, because I wanted to pick my scaling from what the measures actually did
+rather than from what I assumed they would do.
+
+| Text | spread | ttr | punct | model signal |
+|---|---|---|---|---|
+| 1 clearly AI | 0.406 | 0.792 | 0.038 | 0.8539 |
+| 2 clearly human, real voice | 0.890 | 0.804 | 0.107 | 0.5088 |
+| 3 plain human (the Maya case) | 0.140 | 0.673 | 0.000 | 0.7383 |
+| 4 formal human | 0.544 | 0.811 | 0.075 | 0.6691 |
+| 5 lightly edited AI | 0.644 | 0.792 | 0.038 | 0.4915 |
+
+**Finding 1: type token ratio does not work.** Clearly AI scored 0.792 and
+clearly human scored 0.804. That is a difference of 0.012 on a measure that
+runs 0 to 1. It is not separating anything. I kept it at a weight of 0.2
+instead of deleting it, because it is the only one of my three that notices
+repeated vocabulary and it may do something on text outside my sample, but it
+cannot swing a decision by itself. A signal that returns nearly the same number
+for everything is a real result and it goes in the write up rather than getting
+quietly tuned until it looks better.
+
+**Finding 2: typos break the model signal, and it is trivial.** Row 5 is row 1
+with four words misspelled and two sentences chopped differently. Nothing about
+who wrote it changed. The model signal fell from **0.8539 to 0.4915**, below my
+genuinely human text at 0.5088. It also pushed spread up from 0.406 to 0.644,
+so the same edit fooled both signals at once. That took under a minute and I
+was not even trying.
+
+**Finding 3: formal human writing reads as machine.** Row 4 scored 0.6691 on
+the model signal, over my 0.65 AI threshold. Being careful and formal gets you
+accused by signal one, which is the opposite of what most people would guess.
+
+## What the two signals and the rule produced
+
+| Text | model | style | gap | plain average | my rule |
+|---|---|---|---|---|---|
+| 1 clearly AI | 0.8539 | 0.6289 | 0.225 | 0.7414 | **0.7110** |
+| 2 clearly human | 0.5088 | 0.0886 | 0.420 | 0.2987 | **0.1928** |
+| 3 plain human | 0.7383 | 0.9415 | 0.203 | 0.8399 | **0.8151** |
+| 4 formal human | 0.6691 | 0.3840 | 0.285 | 0.5266 | **0.4778** |
+| 5 lightly edited AI | 0.4915 | 0.4925 | 0.001 | 0.4920 | **0.4920** |
+
+Clearly AI lands at 0.7110 and clearly human at 0.1928. That is a gap of
+**0.518**, and my criterion 2 asks for at least 0.30. It holds, for now, on
+five texts I chose myself.
+
+## The case where my two signals split
+
+Row 2, the clearly human text. The two signals are **0.420 apart**, the widest
+split in my set.
+
+The model signal says **0.5088**, which is not a verdict at all. It is the
+model saying it has no idea. The style signal says **0.0886**, which is about
+as confidently human as that signal gets, and it is right: that text has
+sentences running from two words to twenty two, and a comma rate to match.
+
+A plain average gives 0.2987. My rule gives **0.1928**.
+
+That difference matters because of where my thresholds sit. 0.2987 is under
+0.35, so both answers happen to land on the human label here, but the plain
+average leaves that writer sitting 0.05 away from being called uncertain about
+their own work, on the strength of one signal that admitted it did not know. My
+rule treats the disagreement itself as the reason to trust the confident signal
+over the shrugging one, and puts them clearly in the clear.
+
+## What the rule does not fix, which is the part that matters
+
+Row 3 is the whole problem. Plain human writing scored 0.7383 on the model
+signal and 0.9415 on the style signal. They **agree**, so my disagreement rule
+barely touches it: 0.8399 becomes 0.8151 and that writer still gets accused.
+
+This is exactly what I wrote on paper in Milestone 1 before I had measured
+anything. Both signals fail the same person in the same direction, because
+plain writing is both predictable and even. Averaging two signals that share a
+blind spot does not cancel the error out, it makes the system confident about
+it. No combining rule can rescue me from that, because by the time
+`combine_signals` runs, both numbers are already wrong in the same direction.
+
+Where it did help is row 4. Formal human writing was at 0.6691 on the model
+signal alone, over my AI threshold and heading for an accusation. The style
+signal disagreed at 0.3840, my rule leaned toward it, and the result came out
+at 0.4778, which is uncertain rather than accusing. One writer saved, one
+writer not.
+
+Whatever protection row 3 gets has to come from the thresholds in Milestone 5,
+and I already know it will cost me on the other side.

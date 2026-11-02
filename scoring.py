@@ -52,11 +52,56 @@ def combine_signals(model_score: float, style_score: float) -> float:
     The weights in config.py are placeholders. Change them, or ignore them and
     write a different rule.
     """
-    # TODO: replace this
-    return (
+    # ─────────────────────────────────────────────────────────────────────
+    # MY RULE, in words, written before I coded it:
+    #
+    #   Take the weighted average of the two signals. Then, the more the two
+    #   signals disagree with each other, the further the answer slides
+    #   toward whichever of them reads more human.
+    #
+    # When they agree, the average stands and nothing happens. When they
+    # split, I treat that as a reason for doubt, and the doubt goes to the
+    # writer rather than against them.
+    #
+    # WHY, and this is the Milestone 1 decision actually being made:
+    #
+    # On a writing site the two mistakes do not cost the same. Letting some
+    # generated text through costs the site a little. Telling a real writer
+    # that a machine wrote their work costs that person a lot, and all they
+    # get back is an appeal form. So when my two methods cannot agree about
+    # somebody, I do not want to split the difference and call it confidence.
+    # I want to come down on the side that does not accuse them.
+    #
+    # WHAT THIS RULE DOES NOT FIX, which matters more than what it does:
+    #
+    # It only helps when the signals disagree. My Milestone 1 trace found that
+    # both of my signals fail plain, ordinary human writing in the SAME
+    # direction, and the Milestone 4 calibration proved it: plain human
+    # writing scored 0.738 on the model signal and 0.942 on the style signal.
+    # They agree, so this rule leaves it almost alone, and that writer still
+    # gets accused. Two signals is not the same thing as two independent
+    # signals, and no combining rule can rescue me from that. The protection
+    # for that writer has to come from the thresholds in Milestone 5.
+    # ─────────────────────────────────────────────────────────────────────
+
+    average = (
         config.WEIGHT_MODEL_SIGNAL * model_score
         + config.WEIGHT_STYLE_SIGNAL * style_score
     )
+
+    # Whichever signal is readier to believe a person wrote this.
+    kinder = min(model_score, style_score)
+
+    # How far apart the two signals are, as a fraction of the gap I treat as
+    # total disagreement. Clamped, so a huge split cannot lean more than fully.
+    gap = abs(model_score - style_score)
+    lean = min(gap / config.FULL_DISAGREEMENT, 1.0) * config.MAX_LEAN
+
+    # Slide from the average toward the kinder signal by that much. With
+    # lean = 0 this returns the plain weighted average.
+    score = average + (kinder - average) * lean
+
+    return round(min(max(score, 0.0), 1.0), 4)
 
 
 def score_to_label(score: float) -> tuple[str, str]:

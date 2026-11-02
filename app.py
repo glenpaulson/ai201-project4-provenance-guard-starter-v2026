@@ -251,6 +251,8 @@ def submit():
     a malformed input is one of the most common real failures there is.
     """
     import detector
+    import scoring
+    import stylometry
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -272,8 +274,7 @@ def submit():
     # and /appeal needs it later.
     content_id = str(uuid.uuid4())
 
-    # Signal one. This is the only signal so far. Signal two comes in
-    # Milestone 4, and so does the real score.
+    # Signal one: how predictable the writing is to a language model.
     try:
         model_score = detector.model_signal(text)
     except detector.DetectorUnavailable as exc:
@@ -290,10 +291,17 @@ def submit():
             "message": str(exc),
         }), 400
 
-    # Placeholders until Milestone 4 and 5. Written down as placeholders on
-    # purpose, so nothing downstream reads them as a real answer.
-    style_score = None
-    confidence = model_score
+    # Signal two: the shape of the writing, without reading a word of it.
+    # No try/except around this one. It is plain arithmetic over the text, it
+    # does not load anything, and the edge cases it used to have (one sentence,
+    # no words at all) are handled inside stylometry.py itself.
+    style_score = stylometry.style_signal(text)
+
+    # Two numbers become one. The rule, and the reasoning behind it, live in
+    # scoring.py::combine_signals.
+    confidence = scoring.combine_signals(model_score, style_score)
+
+    # Still a placeholder, on purpose. The label mapping is Milestone 5.
     guess = "unsure"
     label = "PLACEHOLDER, written in Milestone 5."
 

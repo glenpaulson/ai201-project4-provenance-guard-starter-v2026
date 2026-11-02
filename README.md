@@ -53,35 +53,114 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**Where it lives:** `detector.py::model_signal`
 
-**Why that might differ between human and AI writing:**
+**What it measures:** how easy the writing is to guess. A small language model
+(gpt2) runs over the text and I look at how surprised it was. Not surprised
+means the words were the obvious ones. That gets squashed onto 0 to 1, where
+higher means more likely written by a machine.
 
-**What it can't see:**
+**Why that might differ between human and AI writing:** a language model writes
+by picking a likely next word, over and over. So text a model produced tends to
+be text a model finds easy to guess. People wander more. An odd word, an abrupt
+turn, the specific thing instead of the usual thing.
+
+**What it can't see:** who wrote anything. All it really measures is whether
+the words are ordinary ones in ordinary sentences, and plenty of real people
+write exactly like that. I measured this rather than assuming it: plain,
+ordinary human writing scored **0.7383**, above my AI threshold of 0.65. Formal
+human writing scored **0.6691**, also above it.
+
+It fails the other way too. Taking text I know a machine wrote and misspelling
+four words dropped it from **0.8539 to 0.4915**, below my genuinely human
+sample. The edit took under a minute and changed nothing about who wrote it.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**Where it lives:** `stylometry.py::style_signal`
 
-**Why that might differ between human and AI writing:**
+**What it measures:** the shape of the text, never the meaning. Three things,
+each stretched onto 0 to 1 and then weighted:
 
-**What it can't see:**
+| Measure | What it is | Weight | Why that weight |
+|---|---|---|---|
+| `sentence_length_spread` | standard deviation of sentence lengths, divided by the mean | 0.4 | separated my clear cases: 0.406 against 0.890 |
+| `type_token_ratio` | unique words over total words | 0.2 | **it did not separate anything**: 0.792 against 0.804 |
+| `punctuation_density` | optional marks per word, full stops excluded | 0.4 | separated my clear cases: 0.038 against 0.107 |
+
+**Why that might differ between human and AI writing:** generated prose tends
+to come out even. Sentences of about the same size, one after another, from a
+narrower band of words, because that is what "most likely next word" produces
+on average. Human writing is lumpier.
+
+**What it can't see:** it cannot read. It has no idea what the text says, so
+anything that changes the shape without changing the substance moves it. Typos,
+chopping one long sentence into three, pasting in a quotation. My lightly
+edited AI sample moved this signal by 0.14 for about a minute of typing.
+
+The second blind spot is worse and I only found it by measuring. Plain,
+ordinary human writing scored **0.9415** on this signal, higher than the text I
+know a machine wrote. Short even sentences and no optional punctuation is
+exactly what this measures, and that is how a lot of people write.
 
 ### The combining rule
 
-<!-- Write the rule in words, then give the numbers. What happens when the two
-     signals disagree? -->
+**The rule, in words:** take the weighted average of the two signals. Then, the
+more the two signals disagree with each other, the further the answer slides
+toward whichever of them reads more human. When they agree the average stands
+and nothing happens. When they split, I treat that as a reason for doubt, and
+the doubt goes to the writer rather than against them.
 
-**The rule:**
+**Why:** on a writing site the two mistakes do not cost the same. Letting some
+generated text through costs the site a little. Telling a real writer that a
+machine wrote their work costs that person a lot, and all they get back is an
+appeal form. So when my two methods cannot agree about somebody, I do not want
+to split the difference and call it confidence.
 
 **The numbers:**
 
+| Setting | Value | What it does |
+|---|---|---|
+| `WEIGHT_MODEL_SIGNAL` | 0.5 | how much signal one counts |
+| `WEIGHT_STYLE_SIGNAL` | 0.5 | how much signal two counts |
+| `FULL_DISAGREEMENT` | 0.5 | the gap between signals at which the lean is strongest |
+| `MAX_LEAN` | 0.6 | how far the answer can slide toward the kinder signal |
+
+All four are in `config.py`.
+
+The weights are equal, and that is a decision rather than a default I left
+alone. The style signal actually separated my clear cases better than the model
+signal did, a gap of 0.54 against 0.35. I did not promote it for that, because
+it is also the signal I can break in a minute with a keyboard. Neither earned
+the right to outvote the other, so the disagreement lean does the real work.
+
 **Where it lives:** `scoring.py::combine_signals`
 
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
-
 **A case where my two signals split, and what my rule does with it:**
+
+My clearly human sample, where the two signals came out **0.420 apart**.
+
+| | Score | What it was saying |
+|---|---|---|
+| model signal | 0.5088 | not a verdict. The model has no idea |
+| style signal | 0.0886 | about as confidently human as that signal gets |
+| plain average | 0.2987 | |
+| **my rule** | **0.1928** | |
+
+The style signal was right: that text has sentences running from two words to
+twenty two, with a comma rate to match. My rule treats the disagreement itself
+as a reason to trust the confident signal over the shrugging one, so instead of
+leaving a real writer sitting 0.05 away from being called uncertain about their
+own work, it puts them clearly in the clear.
+
+**And the case my rule does not fix, which matters more:** plain human writing
+scored 0.7383 on the model signal and 0.9415 on the style signal. They
+**agree**, so the disagreement lean barely touches it. 0.8399 becomes 0.8151
+and that writer still gets accused. Both of my signals fail the same person in
+the same direction, because plain writing is both predictable and even.
+Averaging two signals that share a blind spot does not cancel the error out, it
+makes the system confident about it. Whatever protection that writer gets has
+to come from the thresholds, not from here.
 
 
 
