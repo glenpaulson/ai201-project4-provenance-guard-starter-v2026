@@ -42,63 +42,117 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. Wrongly accusing my own writing
 
-<!-- Your criterion. It must name a number. -->
-
-
+Of 10 pieces of writing that I wrote myself, **at most 1** comes back with a
+guess of `ai`. This has to hold in each of the three trials separately, so
+results of 2, 1, 2 across the trials count as a miss, not an average of 1.67.
 
 **Why this target:**
 
+On a writing site the two kinds of mistake do not cost the same. If some
+generated text slips through, the site carries a post it did not want. If a
+real writer gets told a machine wrote their work, that person is accused of
+cheating by a system they cannot argue with, and the appeal is all they get. So
+I am willing to let more AI text through in exchange for fewer wrong
+accusations, and 1 in 10 is already higher than I would want to defend to the
+person it happens to.
 
+I picked 1 rather than 0 because I do not believe 0 is reachable. My Milestone 1
+trace found that both of my signals fail the same kind of writer in the same
+direction, so plain writing is going to get caught sometimes. A target of 0
+would be a target I set knowing it was a wish.
 
 ---
 
-## 2.
+## 2. Clearly AI and clearly human writing actually separate
 
-<!-- Your criterion. -->
-
-
+Across 3 pieces I am confident are AI generated and 3 I am confident are human
+written, the **average combined score of the AI group is at least 0.30 above
+the average combined score of the human group**, in each of the three trials.
 
 **Why this target:**
 
+0.30 is not an arbitrary round number. My unsure band runs from 0.35 to 0.65,
+which is 0.30 wide. If the two kinds of writing do not separate by at least the
+width of that band, then clearly AI text and clearly human text can both land
+inside it, and every label my service produces is a coin flip wearing a
+confident sentence. The gap has to be at least as wide as the gap I claim to be
+measuring, or my thresholds are decoration.
 
+I am measuring group averages rather than demanding that every single AI piece
+beat every single human piece, because one weird input should not sink the
+whole criterion. If the averages fail, something real is wrong with a signal.
 
 ---
 
-## 3.
+## 3. All three labels are reachable
 
-<!-- Your criterion. -->
-
-
+Across my 6 calibration pieces, **each of the three labels appears at least
+once**: at least one `human`, at least one `unsure`, and at least one `ai`, in
+each of the three trials.
 
 **Why this target:**
 
+A label no score can produce is a gap in my ranges that I would never notice,
+because nothing errors. It just silently never happens.
 
+The one I care about most here is `unsure`. If that label never fires, I have
+built a service that is always certain, and Milestone 1 already showed me it has
+no right to be. A system that can only say "a person wrote this" or "a machine
+wrote this" has removed the honest answer from its own vocabulary, and the
+honest answer is the one that protects the writer in the middle.
 
 ---
 
-## 4.
+## 4. An appeal always lands
 
-<!-- Your criterion. -->
-
-
+Of 5 appeals sent against content ids that really exist, **all 5** return a 200,
+write exactly one new line to `logs/audit.jsonl`, and that new line has a status
+of `under_review`. Of 3 appeals sent against content ids that do not exist,
+**all 3** return a 404 and write no decision line at all. This holds in each of
+the three trials.
 
 **Why this target:**
 
+This is the only criterion where I will accept nothing less than every single
+case passing, and that is deliberate. The appeal is the entire remedy. It is the
+one thing standing between a writer who was wrongly accused and nothing at all.
+A detector that is wrong sometimes is a system with a known flaw. An appeal path
+that is wrong sometimes is a system that loses people's objections without
+telling them, which is worse, because the writer thinks they have been heard.
 
+The 404 half matters as much as the 200 half. If a typo'd content id quietly
+returns a cheerful 200, the writer walks away believing their appeal was
+recorded when nothing was written down anywhere.
+
+Note on how this gets tested: `run_eval.py` only sends to `/submit`, so it
+cannot test this one on its own. I have to submit first, take the content id
+that comes back, and then appeal against it. I will say in my write up whether I
+did that by hand or extended the tooling.
 
 ---
 
-## 5.
+## 5. Bad input never crashes the service
 
-<!-- Your criterion. -->
-
-
+Sent 4 malformed requests (`text` missing entirely, `text` empty, `text` set to
+null, and `text` of 50,000 words), **all 4** come back with a 400 and a JSON
+body containing an `error` field, **none** return a 500, and **none** take
+longer than 10 seconds to answer. This holds in each of the three trials.
 
 **Why this target:**
 
+A crash on malformed input is one of the most ordinary real failures there is,
+and it is the first thing anybody probing my service will find. A 500 is not
+just an error, it is information: it tells whoever sent it that they found a
+place where my handler broke, which is a map of where to push harder.
 
+The 10 second bound is in there because of the 50,000 word case specifically. My
+first signal loads text into a model, and a huge submission is a way to tie up
+the service without ever triggering an error at all. Refusing it quickly costs
+me nothing, since my detector only reads the first 400 tokens anyway, so
+accepting an enormous body buys no extra accuracy and hands out a free way to
+make everyone else wait.
 
 ---
 
