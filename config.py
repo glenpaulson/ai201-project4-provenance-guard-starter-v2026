@@ -137,10 +137,27 @@ AI_THRESHOLD = 0.65
 # an hour, and a script sending a thousand variations to map your thresholds.
 # Your README has to say why your numbers and not others.
 
-RATE_LIMITING_ENABLED = os.getenv("AI201_RATE_LIMITS", "0") == "1"
+# On by default now. The env var still turns it off if I need a run without it,
+# which I do when I want to tell a rate limit rejection apart from a real
+# refusal in the attack set.
+RATE_LIMITING_ENABLED = os.getenv("AI201_RATE_LIMITS", "1") == "1"
 
-RATE_LIMIT_PER_MINUTE = 10
-RATE_LIMIT_PER_DAY = 200
+# My numbers, and the reasoning is in the README under Rate Limiting.
+#
+# The short version. A real writer submitting their own post needs two or three
+# goes in a row at the very most: submit it, notice a typo, submit again. Five
+# covers that with room for a double click and a retry.
+#
+# The daily number is the one that actually defends anything, and that is
+# because of something specific to my service: /submit hands back model_score
+# and style_score, not just the label. Every request tells the caller where my
+# two signals sit, so a script mapping my thresholds learns a lot per request
+# and does not need to hurry. One request every fifteen seconds never touches a
+# per minute limit and still gets 240 readings in an hour. Sixty a day is far
+# more than any real writer needs and it caps what a patient script can learn
+# before someone notices it.
+RATE_LIMIT_PER_MINUTE = 5
+RATE_LIMIT_PER_DAY = 60
 
 # Flask-Limiter warns loudly without this. In-memory is right for one laptop
 # and wrong for anything real — a restart forgets every count, and two copies

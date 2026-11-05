@@ -499,24 +499,113 @@ gave me and what I shipped were different, and why.
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 60 per day
+
+They live in `config.py` as `RATE_LIMIT_PER_MINUTE` and `RATE_LIMIT_PER_DAY`,
+and the limit is applied to `app.py::submit`.
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**The per minute number is for the real writer.** Somebody submitting their own
+post needs two or three goes in a row at the very most: send it, spot a typo,
+send it again. Five covers that with room left over for a double click and a
+retry on a dropped connection. I could not find a story about an honest writer
+that needed a sixth submission inside the same minute.
+
+**The per day number is the one that actually defends anything**, and that is
+because of something specific to my service rather than a general rule. My
+`/submit` response hands back `model_score` and `style_score`, not only the
+label. I put them there on purpose in unit 7, because `run_eval.py` and
+`run_attacks.py` read them off the response and I cannot diagnose anything
+without them. The cost of that decision is that **every single request tells
+the caller exactly where both of my signals sit on their text.**
+
+That changes what a patient script can do. It does not need to hurry, because
+it is not guessing from a label, it is reading two numbers. One request every
+fifteen seconds never comes close to a per minute limit and still collects 240
+readings in an hour, which is more than enough to find both of my thresholds
+and work out roughly what my style signal rewards. A per minute limit does
+nothing about that caller at all. Sixty a day is far more than any real writer
+needs, and it is the number that caps how much a slow script can learn before
+somebody notices it in the log.
+
+So the two numbers are doing two different jobs. Five a minute stops a burst.
+Sixty a day stops a drip, and the drip is the attack my own response format
+invites.
+
+**What a caller counts as:** per `creator_id` when the request has one, falling
+back to the caller's address when it does not. That is `app.py::rate_limit_key`.
+
+I tested both halves rather than assuming, and the result is not comfortable.
+
+Rotating the name defeats the limit completely. While `flood_tester` was
+blocked, I sent six more from the same machine under six made up names:
+
+| `creator_id` sent | Status |
+|---|---|
+| `rotate_a` | 200 |
+| `rotate_b` | 200 |
+| `rotate_c` | 200 |
+| `rotate_d` | 200 |
+| `rotate_e` | 200 |
+| `rotate_f` | 200 |
+
+Six for six, from the machine I had just finished rate limiting. Leaving
+`creator_id` out instead does fall back to the address and does hold:
+
+```
+request 1 -> 200   request 5 -> 200
+request 2 -> 200   request 6 -> 429
+request 3 -> 200   request 7 -> 429
+request 4 -> 200
+```
+
+So my limit stops a script that is honest about who it is, and stops nothing
+at all once it starts making up names. I kept per `creator_id` anyway, and the
+reason is the other failure: counting per address means one shared network, one
+office, one university, or one phone carrier counts as a single caller, and the
+people who get cut off are real writers who happen to sit behind the same
+address as somebody else. Between a limit that a determined attacker walks
+around and a limit that silently locks out a whole building of innocent
+writers, I would rather be walked around. That is the same one sided trade I
+made with the thresholds in unit 7, and it points the same way.
+
+The real answer is both at once: count per `creator_id` **and** keep a looser
+separate limit per address, so rotating names still runs into a ceiling. I have
+not built that, and it is written up under What's Still Broken rather than
+quietly left out.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
-
+```bash
+$ python run_attacks.py --flood 15
 ```
 
+```
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
+```
+
+Five got through, ten were refused, and the cut falls exactly where
+`RATE_LIMIT_PER_MINUTE = 5` says it should.
+
+**The rejections are in the log too**, which matters more than the status codes.
+An attack that shows up only as an absence is one I would never find: a
+thousand refused requests that left no trace look exactly like a quiet
+afternoon. All ten are there, written by `audit.py::log_rejection` from the 429
+handler in `app.py`:
+
+```json
+{"timestamp": "2026-11-05T17:03:03+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+```
+
+And the body the caller gets back:
+
+```json
+{
+  "error": "rate_limited",
+  "limit": "5 per 1 minute",
+  "message": "Too many submissions. Try again shortly."
+}
 ```
 
 ---
