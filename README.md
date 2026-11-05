@@ -1242,22 +1242,173 @@ why The Improvement is in `stylometry.py`.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one file, `stylometry.py`. Two edits that are two halves of
+the same idea: **signal two should never say "a machine wrote this" when what
+it means is "I cannot read this".**
 
-**Which diagnosis pointed at it:**
+**1. It can now read more than one alphabet.** `words` was
+
+```python
+re.findall(r"[a-z0-9']+", text.lower())
+```
+
+and is now
+
+```python
+re.findall(r"(?:[^\W_]|')+", text.lower(), re.UNICODE)
+```
+
+Same idea, letters and digits make a word and an apostrophe may sit inside one.
+It just no longer assumes letters means a to z. `sentences` got the same
+treatment, picking up the ideographic full stop, the Arabic full stop and
+question mark, and the Devanagari danda, none of which are followed by a space
+the way a Latin full stop is.
+
+**2. It can now decline to answer.** New constants `MIN_WORDS_TO_JUDGE = 5` and
+`NO_OPINION = 0.5`, and `style_signal` checks before it measures:
+
+```python
+if len(words(text)) < MIN_WORDS_TO_JUDGE:
+    return NO_OPINION
+```
+
+Reading other alphabets fixes the writers who use them. It does nothing about
+the other half of the bug, which is that my three measures each return 0.0 for
+an empty text, and 0.0 means maximum machine likeness on all three scales. An
+absence of evidence and a confident accusation came out of this module as the
+same number. Now they do not.
+
+**Which diagnosis pointed at it:** diagnosis 1, and it lands on diagnosis 2's
+symptoms as well. Diagnosis 1 is the one I called the single worst outcome of
+the whole run: `style_signal` returning exactly 1.0 for every writer who does
+not use the Latin alphabet, before considering one thing about how they write.
+
+**What I did first, before changing anything.** I checked the new pattern
+against the old one over all 22 Latin script texts in `scenarios.py`. They
+return **identical word lists and identical sentence lists, 22 for 22**. That
+is why the after run below is readable at all: anything that moved, moved
+because of this change and not because I disturbed something else on the way
+past.
+
+---
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+```bash
+$ python run_attacks.py --set ../attack_set --label after
+```
 
+Full record in `results/attack_run_2026-11-05_1046_after.md`.
 
+**53 of the 56 attacks returned byte for byte identical results.** Three moved,
+and they are exactly the three I predicted would move before I ran it:
+
+| ID | What it is | Guess before | Guess after | conf before | conf after | style before | style after |
+|---|---|---|---|---|---|---|---|
+| MF05 | 4,000 repetitions of the letter a | **ai** | unsure | 0.8754 | 0.6002 | 0.8000 | 0.5000 |
+| MF06 | 200 emoji | **ai** | unsure | 0.9984 | 0.6003 | 1.0000 | 0.5000 |
+| MF07 | one sentence of Arabic | **ai** | **ai** | 0.9479 | 0.8464 | 1.0000 | 0.8000 |
+
+**Totals: 39 held, 17 broke**, against 37 held and 19 broke before.
+
+| Family | Attacks | Held before | Held after |
+|---|---|---|---|
+| `evasion` | 10 | 1 | 1 |
+| `false_positive` | 8 | 1 | 1 |
+| `prompt_injection` | 6 | 6 | 6 |
+| `malformed` (text content) | 8 | 5 | **7** |
+| `malformed` (raw request bodies) | 12 | 12 | 12 |
+| `flood_same_creator` | 12 | 12 | 12 |
+
+RQ10 and RQ11 came back 429 again, for the same reason as the before run and
+with the same true outcome of 400. That is the rate limiter masking them, not a
+change, and the method is written up under Attack Run Before.
 
 **Did it help, and how do I know:**
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+Partly. It fixed two attacks and **it did not fix the one I set out to fix.**
 
+**What got better.** MF05 and MF06 stopped being accusations. My service used to
+look at 200 emoji and tell whoever sent them, with 0.9984 confidence, that a
+computer wrote it. It now says it could not tell, which is the truth. The same
+goes for 4,000 repetitions of one letter. Those are the two cleanest results in
+this run because nothing else about either submission changed.
 
+**What did not.** **MF07 is still accused.** The single worst outcome of my
+before run, the one I quoted a mechanism for and said "this is what I am
+fixing", is still an accusation after I fixed it. It moved from 0.9479 to
+0.8464 and stayed on the wrong side of my 0.65 line.
+
+I went and found out why rather than guessing, and the answer is that the bug I
+fixed has relatives I did not:
+
+| MF07 after the fix | Value | Why |
+|---|---|---|
+| words found | 17 | the fix worked, this used to be 0 |
+| sentences found | **1** | so `sentence_length_spread` returns its empty case of 0.0, which still means maximum machine likeness. **The same absence as accusation bug, one level down, in the measure rather than the signal.** |
+| `punctuation_density` | **0.000** | `INTERESTING_MARKS` is a list of Latin punctuation. Arabic uses the Arabic comma and semicolon, which are not in it, so this measure reports no punctuation no matter how punctuated the text is |
+| `type_token_ratio` | 1.000 | reads as fully human, but it only carries weight 0.2 |
+| **style_signal** | **0.8000** | 0.4 of maximum machine from spread, 0.4 from punctuation, 0.0 from vocabulary |
+
+And the part no regular expression was ever going to fix:
+
+```
+MF07 perplexity   10.9
+MF07 model_signal 0.9064
+```
+
+**Signal one has exactly the same bug and I did not touch it.** gpt2 splits
+Arabic into byte level pieces that are highly predictable, so it reports very
+low perplexity, and low perplexity is what I score as machine written. Signal
+one cannot read Arabic either, and it expresses that as an accusation too.
+
+That matters because of how much work signal two would have had to do alone:
+
+| If signal two had said | combined | label |
+|---|---|---|
+| 0.0, confidently human | 0.1813 | human |
+| 0.2 | 0.3413 | human |
+| 0.5, no opinion | 0.6041 | unsure |
+| 0.8, what it actually says | **0.8464** | **ai** |
+
+With signal one stuck at 0.9064, signal two would have had to come back under
+about 0.4 to clear this writer. Fixing one signal's blindness while the other
+stays blind in the same place does not rescue the person. It just makes the
+accusation slightly quieter.
+
+**The trade I made, which I only found by looking for it.** My
+`MIN_WORDS_TO_JUDGE = 5` rule opens a gap. `app.py::check_text` only requires
+40 characters, and 40 characters of long words is fewer than five words:
+
+```
+"Antidisestablishmentarianism notwithstanding, parliamentarians procrastinate."
+   77 characters, 4 words, style_signal forced to 0.5
+```
+
+Anything that gets under five words now caps the combined score at about 0.60
+no matter how certain signal one is:
+
+| model_score | before, style 1.0 | after, style 0.5 |
+|---|---|---|
+| 0.85 | 0.9115 **ai** | 0.6015 unsure |
+| 0.95 | 0.9735 **ai** | 0.6035 unsure |
+| 1.00 | 1.0000 **ai** | 0.6000 unsure |
+
+Nothing in the attack set exercises this, so it costs me nothing in the table
+above, and it is still a real gap I created. It is narrow, because there is not
+much a person can say in four words, but "narrow" is not "closed" and I would
+rather write it down than let the after run look cleaner than it is.
+
+**What stayed the same, which I checked rather than assumed.** All five
+criteria, run again with `--label after`, came back identical to the before
+run: criterion 1 still misses at 2 of 10 in all three trials, criteria 2 to 5
+still pass with the same numbers to four decimal places. The evidence is in
+`results/run_2026-11-05_1048_after.md` and
+`results/extra_checks_2026-11-05_1048_after.md`, beside the before files they
+should be compared against. The change was never
+going to touch them, because every text in `scenarios.py` is Latin script with
+more than five words, and the control I ran first said so. Confirming it is how
+I know the after run measures one change and not two.
 
 ---
 

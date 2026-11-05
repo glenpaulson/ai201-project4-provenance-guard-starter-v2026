@@ -34,15 +34,61 @@ import re
 import statistics
 
 
+# ── UNIT 8 IMPROVEMENT: reading more than one alphabet ───────────────────────
+#
+# These two functions came with the starter and I left them alone all through
+# unit 7. The attack set found what was wrong with them in one request.
+#
+# `words` used to be `re.findall(r"[a-z0-9']+", text.lower())`, which matches
+# the Latin alphabet and nothing else. Give it Arabic, Hebrew, Chinese,
+# Japanese, Korean, Russian or Hindi and it returns an empty list. That empty
+# list then walked through all three of my measures, every one of them returned
+# its empty case of 0.0, and `_to_ai_score` read 0.0 as the far machine end of
+# every scale. The result was that `style_signal` returned exactly 1.0, the
+# largest accusation it can make, for every writer who does not use the Latin
+# alphabet. MF07 in the attack set is one sentence of Arabic and my service
+# told that writer a computer wrote it, with 0.9479 confidence.
+#
+# The replacement below keeps the same idea: letters and digits make up words,
+# an apostrophe is allowed inside one. It just no longer assumes that letters
+# means a to z. `[^\W_]` is "a word character but not an underscore", which
+# under Python's default unicode rules covers letters and digits in every
+# script.
+#
+# I checked it leaves English alone rather than assuming it would. Over the 22
+# Latin script texts in `scenarios.py` the old and new patterns return
+# identical word lists and identical sentence lists, 22 for 22, so nothing in
+# any of my earlier results moves because of this.
+#
+# What it does NOT fix, and I am not going to pretend otherwise: Chinese and
+# Japanese do not put spaces between words, so splitting on whitespace finds
+# two or three enormous tokens rather than real words. That is better than
+# zero, because zero was a guaranteed accusation, but it is not reading them
+# properly. Doing that needs a segmenter for each language and is well past
+# what one regular expression can do.
+
+# Sentence enders used by other writing systems: the ideographic full stop and
+# full width marks for Chinese and Japanese, the Arabic full stop and question
+# mark, and the Devanagari danda. They are not followed by a space the way a
+# Latin full stop is, so this half of the pattern does not require one.
+OTHER_SENTENCE_ENDERS = "。！？۔؟।"
+
+
 def sentences(text: str) -> list[str]:
-    """Split into sentences. Rough and good enough — given to you."""
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    """Split into sentences. Rough and good enough."""
+    parts = re.split(
+        rf"(?<=[.!?])\s+|(?<=[{OTHER_SENTENCE_ENDERS}])\s*", text.strip())
     return [p for p in parts if p.strip()]
 
 
 def words(text: str) -> list[str]:
-    """Split into lowercase words, punctuation stripped. Given to you."""
-    return re.findall(r"[a-z0-9']+", text.lower())
+    """
+    Split into lowercase words, punctuation stripped.
+
+    Letters and digits in **any** script, with apostrophes allowed inside a
+    word so that "don't" stays one word.
+    """
+    return re.findall(r"(?:[^\W_]|')+", text.lower(), re.UNICODE)
 
 
 # ── The three measures — YOU BUILD THESE ─────────────────────────────────────
@@ -172,6 +218,32 @@ WEIGHT_SPREAD = 0.4
 WEIGHT_TTR = 0.2
 WEIGHT_PUNCT = 0.4
 
+# ── UNIT 8 IMPROVEMENT, second half ──────────────────────────────────────────
+#
+# How many words this signal needs before it is willing to say anything.
+#
+# Reading other alphabets fixes the writers. It does not fix the other half of
+# the same bug, which is that my three measures have no way to say "there is
+# nothing here to measure". They each return 0.0 for an empty text, and 0.0
+# means maximum machine likeness on all three scales, so "I found nothing"
+# comes out of this module sounding exactly like "a computer definitely wrote
+# this". That is how 200 emoji scored 0.9984 and 4,000 repetitions of the
+# letter a scored 0.8754.
+#
+# An accusation and an absence of evidence should not produce the same number.
+# Below this many words, `style_signal` returns 0.5 and means it: no opinion,
+# in either direction.
+#
+# Five is low on purpose. The point is to catch text with no readable words in
+# it at all, not to refuse short submissions, which `app.py::check_text`
+# already handles at 40 characters. The shortest real text anywhere in my
+# scenarios or the attack set has eight words.
+MIN_WORDS_TO_JUDGE = 5
+
+# What this signal returns when it has nothing to go on. Dead centre, so it
+# adds no weight to either side of the argument.
+NO_OPINION = 0.5
+
 
 def _to_ai_score(value: float, machine_end: float, human_end: float) -> float:
     """
@@ -216,6 +288,13 @@ def style_signal(text: str) -> float:
     sentences up moved AI text from 0.628 down to 0.492, and it took about a
     minute to do.
     """
+    # Before measuring anything, check there is something to measure. Without
+    # this, "I found no words" comes out of the arithmetic below as 1.0, which
+    # is the same number this signal uses for "a machine definitely wrote
+    # this". See MIN_WORDS_TO_JUDGE above.
+    if len(words(text)) < MIN_WORDS_TO_JUDGE:
+        return NO_OPINION
+
     spread = _to_ai_score(
         sentence_length_spread(text), SPREAD_MACHINE_END, SPREAD_HUMAN_END
     )
