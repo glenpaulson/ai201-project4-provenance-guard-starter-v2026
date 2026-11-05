@@ -834,22 +834,183 @@ This is what I am fixing in The Improvement.
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
+```bash
+$ python run_eval.py --label before            # criteria 2, 3 and 5
+$ python run_extra_checks.py --label before    # criteria 4 and 5
+```
+
+Three trials each. What ran against what is written down in `scenarios.py`.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. Wrongly accusing my own writing | at most 1 of 10 of my own pieces guessed `ai` | 2 of 10 | 2 of 10 | 2 of 10 | **MISS** |
+| 2. Clearly AI and clearly human separate | AI group averages at least 0.30 above the human group | gap 0.4752 | gap 0.4752 | gap 0.4752 | **PASS** |
+| 3. All three labels are reachable | all three labels appear across 6 calibration pieces | all 3 | all 3 | all 3 | **PASS** |
+| 4. An appeal always lands | 5 of 5 valid return 200 + one log line + `under_review`; 3 of 3 unknown ids return 404 + nothing logged | 5/5 and 3/3 | 5/5 and 3/3 | 5/5 and 3/3 | **PASS** |
+| 5. Bad input never crashes the service | 4 of 4 return 400 with an `error` field, no 500, nothing over 10 seconds | 4/4, slowest 0.008s | 4/4, slowest 0.033s | 4/4, slowest 0.026s | **PASS** |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+**Criterion 1 misses, 2 of 10 against a target of at most 1.** The same two
+pieces in every trial, so this is a clean miss and not a borderline one.
+
+**What the sample is**, because the number is only worth what the sample is
+worth. These ten pieces are not ten separate things I wrote. They are one
+document cut into ten paragraph sized chunks: a case study review I wrote for a
+data science module. One topic, one register, one sitting. So this result is
+about my formal academic writing rather than my writing in general, and ten
+chunks of one essay cannot disagree with each other the way ten genuinely
+separate pieces would. Everything went in exactly as I typed it, typos
+included, because correcting them would change what the detector sees.
+
+It is still the right sample to have started with. The attack set aims straight
+at this register: FP04 is "a student essay written to a rubric" and FP02 is
+"human writing in a formal register", and my service accused both. This is my
+own writing in the register that already broke it.
+
+Trial 1, every piece, produced by `run_eval.py::main`:
+
+| Piece | Guess | model | style | combined | Opening words |
+|---|---|---|---|---|---|
+| 1 | **ai** | 0.5911 | 0.7943 | **0.6679** | The team presented the topic on Storytelling |
+| 2 | human | 0.3172 | 0.3219 | 0.3195 | The topic goes on to explore common steps |
+| 3 | human | 0.2007 | 0.7591 | 0.3124 | The topic covered both good and bad examples |
+| 4 | unsure | 0.2924 | 0.8457 | 0.4031 | The topic really matters as the end viewer |
+| 5 | human | 0.1863 | 0.5175 | 0.2861 | An inaccurate or often not well annotated |
+| 6 | unsure | 0.5712 | 0.6439 | 0.6044 | Hence the data visualizations should be |
+| 7 | unsure | 0.4225 | 0.6490 | 0.5050 | I would give them an A grade. I loved how |
+| 8 | unsure | 0.2599 | 0.7024 | 0.3637 | I liked their responses to the questions |
+| 9 | **ai** | 0.6460 | 0.9002 | **0.7343** | From the presentation I was able to take away |
+| 10 | human | 0.2941 | 0.3857 | 0.3349 | The common steps involved in coming up with |
+
+Two numbers at the bottom of that table matter more than the two accusations.
+**Across my own ten pieces the model signal averages 0.3781 and the style
+signal averages 0.6520.** Signal one reads my writing as a person wrote it.
+Signal two accuses it. They disagree about me in nine of the ten rows, and the
+only reason eight of those rows survived is that my combining rule leans toward
+the kinder signal when they split. The two that did not survive are the two
+where signal one drifted over 0.5 and stopped disagreeing hard enough to save
+me.
+
+**And then there is pieces 9 and 10, which are consecutive chunks of the same
+paragraph of the same document.**
+
+| | Sentences | Words | spread | ttr | optional punctuation marks | style |
+|---|---|---|---|---|---|---|
+| Piece 9 | 8 | 107 | 0.262 | 0.645 | **2** | **0.9002** |
+| Piece 10 | 9 | 119 | 0.412 | 0.681 | **26** | **0.3857** |
+
+Same writer, same sitting, same subject, adjacent sentences. Piece 9 is flowing
+prose and my service accused it at 0.7343. Piece 10 is the part where I listed
+things out with numbers and brackets, and my service cleared it at 0.3349. The
+entire difference is 24 brackets and commas.
+
+That is not a detector telling writers apart. It is a detector telling
+punctuation apart, and I would not be able to explain to anybody why one half
+of their paragraph is fine and the other half is an accusation.
+
+### How criteria 4 and 5 were tested
+
+`run_eval.py` only talks to `/submit`, and two of my criteria are not shaped
+like that. Criterion 4 needs a submission first and then an appeal against the
+`content_id` that came back, which `scenarios.py` cannot express. Criterion 5
+has a timing bound in it, and `run_eval.py` records status codes but not
+durations.
+
+**I extended the tooling rather than testing them by hand**, in
+`run_extra_checks.py`. Three trials by hand is 24 appeals and 12 malformed
+requests typed out, which is where mistakes come from, and a script leaves a
+results file I can point at instead of a claim I made.
+
+For criterion 4 it checks all three things the criterion names, not just the
+status code: a 200 comes back, the log grows by **exactly one** line, and that
+line says `under_review`. Reading the log length either side is the only way to
+tell "wrote one line" apart from "wrote none" or "wrote two". For the unknown
+ids it checks the 404 **and** that nothing at all was written.
+
+### Real output from one trial
+
+Produced by `run_eval.py::main`, scoring through `app.py::submit` and
+`scoring.py::combine_signals`. Full file: `results/run_2026-11-05_1032_before.md`.
+
+Trial 1 of the `clearly human` scenario, criterion 2:
 
 ```json
-
+[
+  {
+    "status": 200,
+    "guess": "human",
+    "confidence": 0.1928,
+    "model_score": 0.5088,
+    "style_score": 0.0886,
+    "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+    "sent": "My bike chain snapped two miles from home, in the rain, outside a shut"
+  },
+  {
+    "status": 200,
+    "guess": "human",
+    "confidence": 0.3267,
+    "model_score": 0.2829,
+    "style_score": 0.3824,
+    "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+    "sent": "The cat has decided the printer is hers now. Not the top of it. Inside"
+  },
+  {
+    "status": 200,
+    "guess": "human",
+    "confidence": 0.2776,
+    "model_score": 0.186,
+    "style_score": 0.4578,
+    "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+    "sent": "We got to the campsite about four and the pitch was on a slope, which "
+  }
+]
 ```
+
+And trial 1 of criterion 4 and 5, produced by `run_extra_checks.py::main` via
+`check_appeals` and `check_bad_input`. Full file:
+`results/extra_checks_2026-11-05_1024_before.md`.
+
+```json
+{
+  "appeals": [
+    {"case": "valid appeal 1", "status": 200, "appeal_status": "under_review", "new_log_lines": 1, "ok": true, "why": ""},
+    {"case": "valid appeal 2", "status": 200, "appeal_status": "under_review", "new_log_lines": 1, "ok": true, "why": ""},
+    {"case": "unknown id 1", "status": 404, "error_field": "unknown_content_id", "new_log_lines": 0, "ok": true, "why": ""}
+  ],
+  "bad_input": [
+    {"case": "no text field at all", "status": 400, "error_field": "missing_text", "seconds": 0.007, "ok": true, "why": ""},
+    {"case": "text is empty", "status": 400, "error_field": "empty_text", "seconds": 0.005, "ok": true, "why": ""},
+    {"case": "text is null", "status": 400, "error_field": "missing_text", "seconds": 0.006, "ok": true, "why": ""},
+    {"case": "text is 50,000 words", "status": 400, "error_field": "text_too_long", "seconds": 0.008, "ok": true, "why": ""}
+  ]
+}
+```
+
+### The three trials told me less than I expected, and that is worth saying
+
+Look at the Run 1, Run 2 and Run 3 columns for criterion 2. The gap is 0.4752
+in all three. Not close to each other. **Identical, to four decimal places.**
+Criterion 3 is the same: every calibration text scored exactly 0.1928, 0.4778,
+0.4920, 0.7110, 0.8151 and 0.5428 in every trial.
+
+`criteria.md` warned me the opposite would happen, and so did `run_eval.py`:
+"your first signal runs a model, so identical input can score differently
+twice". That is a reasonable thing to expect and it did not happen here. The
+reason is that nothing in my pipeline is random. `detector.py::_load` puts the
+model in eval mode and `perplexity` reads the loss straight out of a single
+forward pass with no sampling anywhere, so the same text gives the same
+perplexity every time. Everything downstream of it is arithmetic.
+
+So the three trials are real evidence of one thing and no evidence of another.
+They do show my service is **reproducible**, which matters, and they confirm the
+unit 7 calibration numbers are still exactly where `notes.md` says. They show
+**nothing at all** about whether my results are stable under variation, because
+I sent the same bytes three times and got the same answer three times. Running
+three identical trials is not the same as testing three times.
+
+What would actually have tested that is varying the input rather than repeating
+it: three different plain paragraphs rather than the same one three times. I
+would rather write that down than present three identical numbers as though
+agreeing with themselves proved something.
 
 **Diagnoses**
 
