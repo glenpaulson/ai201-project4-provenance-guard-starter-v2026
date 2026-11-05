@@ -1414,17 +1414,123 @@ I know the after run measures one change and not two.
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+17 of the 56 attacks still break my service, and criterion 1 still misses.
+Grouped by what would actually fix them rather than by family, because five
+failures on one cause is one problem.
 
+### 1. MF07, and every writer who does not use the Latin alphabet
 
+**Still broken:** MF07, one sentence of Arabic, still labelled `ai` at 0.8464.
+
+**What I would do**, in the order I would do it:
+
+1. **Give the three measures the same ability to abstain that I gave the
+   signal.** `sentence_length_spread` returns 0.0 for a single sentence and
+   `punctuation_density` returns 0.0 when it finds no marks it recognises, and
+   0.0 means maximum machine likeness on both scales. They should return "no
+   evidence" the way `style_signal` now does. This is the bug I already fixed
+   once, one level further down, and finding it there after fixing it above is
+   the clearest sign I had that it is a pattern in how I wrote this module and
+   not a typo.
+2. **Make `INTERESTING_MARKS` cover punctuation rather than Latin
+   punctuation.** Checking Unicode's punctuation categories instead of a
+   hand typed string would pick up the Arabic comma and semicolon, the CJK
+   marks, and every other script's, rather than silently reporting that a
+   well punctuated Arabic paragraph has no punctuation in it.
+3. **Make signal one admit the same limit.** This is the real one. gpt2
+   reports perplexity 10.9 on that Arabic sentence, which my scoring reads as
+   0.9064 machine written, because byte level pieces of a script the model
+   barely saw in training are highly predictable. Signal one cannot read Arabic
+   either and says so as an accusation, exactly like signal two did. No change
+   to `stylometry.py` can rescue a writer while that is true: with signal one
+   at 0.9064, signal two would have to come back under about 0.4 to clear them.
+
+**Why I stopped:** step 3 is not a code change, it is a product decision. The
+honest version is that my service should detect the script and say "I do not
+assess writing in this language" rather than guess, and deciding which
+languages a service refuses to judge is not something I should quietly put in a
+regular expression in the last hour of a unit. Steps 1 and 2 I did not do
+because the milestone asks for one change, and doing three would have made the
+after run unreadable. That is a real reason and it is also a convenient one,
+which is worth admitting.
+
+### 2. The seven false positives, and criterion 1
+
+**Still broken:** FP01 to FP07, all seven, unchanged. Criterion 1 still 2 of 10
+against a target of 1.
+
+**What I would do:** take the weight off punctuation. `punctuation_density`
+carries 0.4 and `sentence_length_spread` another 0.4, so 80% of signal two is
+about the shape of the typing rather than the words. Pieces 9 and 10 of my own
+writing are consecutive chunks of one paragraph, and the only material
+difference between an accusation at 0.7343 and a clearance at 0.3349 is 24
+brackets and commas. Then recalibrate the anchors in `stylometry.py` against a
+real sample of human writing rather than the five texts I picked myself in unit
+7, because anchors chosen from five examples are a guess wearing a decimal
+point.
+
+**Why I stopped:** this moves every number in the project at once. Every result
+in this README would have to be rerun and the before and after comparison would
+stop meaning anything, because I would not be able to say what moved because of
+what. It is the right next change and it is the wrong change to make in the
+same unit as the one I already made.
+
+### 3. The nine evasions
+
+**Still broken:** EV01 to EV09, unchanged.
+
+**What I would do:** cap the lean in `scoring.py::combine_signals`. Right now
+`MAX_LEAN = 0.6` with no ceiling on the result, so a large disagreement can
+produce a **confident human** label, and EV01 and EV08 are generated text that
+my service actively vouched for. Disagreement is a reason to be uncertain, not
+a reason to be confident in the other direction, so the lean should be allowed
+to pull a score toward the unsure band and not through it.
+
+**Why I stopped, and this is the uncomfortable part:** that fixes the wrong
+thing. It would turn two false clearances into two "I do not know", which is
+better, but all nine evasions would still get past me, because the problem is
+not the rule. **The highest scoring broken evasion is 0.6223 and the lowest
+scoring false positive is 0.6688.** Every piece of machine written text that
+beat my service scored lower than every real writer it accused. That ordering
+is not something a weight or a threshold can repair. Fixing it means replacing
+what the signals measure, which is a rewrite rather than an improvement.
+
+### 4. Things the attack set did not catch, which I found by checking
+
+These are not in the 17, and leaving them out because nobody scored them
+against me would be the wrong kind of tidy.
+
+| What | Evidence | What I would do | Why I stopped |
+|---|---|---|---|
+| **My rate limit is bypassed by changing your name.** Six requests from one machine under six made up `creator_id`s all returned 200 while the real one was blocked | Rate Limiting section | Keep the per creator limit and add a looser per address limit underneath it, so rotating names still meets a ceiling | Milestone 1 asked me to choose numbers, not to redesign the key function. This is the first thing I would do in production |
+| **FP08, a genuine 36 character post, is refused outright.** Not accused, so it counted as held, but no decision means no `content_id`, which means **nothing to appeal against** | Attack Run Before, note † | Issue a `content_id` on refusal too, so every refusal is appealable | It changes the response contract I wrote in unit 7 and nothing in the rubric forced it. Of the two ways to fail that writer, silence with no route back may be the worse one |
+| **RQ06 held for the wrong reason.** An object `creator_id` was refused by my length check, not by any validation. With longer text the same body returns 200 and writes the object into the audit log unvalidated | Attack Run Before, note § | Validate `creator_id` is a string in `check_text` | Found it after the before run was already recorded, and changing the route mid unit would have contaminated the comparison |
+| **The gap I created.** Under five words forces `style_signal` to 0.5, capping the combined score near 0.60 however certain signal one is | The Improvement | Raise the floor in `check_text` to a word count rather than a character count | Narrow, since there is little a person can say in four words, and I would rather report it than hide it |
+| **Chinese and Japanese are still not really read.** My fix finds two or three enormous tokens instead of words, because those scripts do not put spaces between them | The Improvement | A real segmenter per language | Past what one regular expression can do, and I would rather have it abstain honestly than pretend |
+
+### 5. One thing that is broken about my testing, not my service
+
+Three trials produced **identical numbers to four decimal places**, every time,
+for every criterion. Nothing in my pipeline is random, so repeating the same
+input three times measures reproducibility and nothing else. I would vary the
+input instead: ten different plain paragraphs rather than one paragraph three
+times. I did not, because the rubric asks for three trials and I read that as
+three repeats rather than three samples, and I only noticed what that cost me
+once the numbers came back identical.
+
+---
 
 **The trade I'd make if this ran for real:**
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
-
-
+I would stop my service producing the `ai` label at all, and ship it as two
+scores and an "unsure" for a human moderator to look at, because on my own
+evidence every piece of machine writing that beat it scored lower than every
+real writer it accused, and a detector whose ranking is inverted does not earn
+the right to accuse anybody. **That means essentially all generated text gets
+through and the site pays for it in moderation it has to do by hand, which is
+the right way round: the alternative charges that cost to a non-native speaker,
+a plain writer, or an Arabic speaker who did nothing but post their own work
+and gets an accusation and an appeal form instead.**
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
