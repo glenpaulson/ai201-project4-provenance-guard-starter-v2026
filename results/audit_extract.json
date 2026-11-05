@@ -1,0 +1,149 @@
+[
+  {
+    "note": "EV01  AI text with typos, called human",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:09+00:00",
+      "content_id": "60be3445-42c2-4f6a-a01b-5fd061f87c67",
+      "creator_id": "attacker_EV01",
+      "guess": "human",
+      "model_score": 0.1635,
+      "style_score": 0.6856,
+      "combined_score": 0.2679,
+      "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "EV08  AI text under the token window, called human",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:10+00:00",
+      "content_id": "1cbf5dda-e730-46fc-9590-8a386b33bd01",
+      "creator_id": "attacker_EV08",
+      "guess": "human",
+      "model_score": 0.2452,
+      "style_score": 0.7241,
+      "combined_score": 0.347,
+      "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "EV10  the one evasion that was caught",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:11+00:00",
+      "content_id": "fdae36fb-59ec-4d47-a962-e26f5596e97e",
+      "creator_id": "attacker_EV10",
+      "guess": "ai",
+      "model_score": 0.9792,
+      "style_score": 0.8606,
+      "combined_score": 0.9115,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "FP01  plain human writing, accused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:11+00:00",
+      "content_id": "7f23bee6-6f8e-4d5b-b4af-45e85ca44c0a",
+      "creator_id": "attacker_FP01",
+      "guess": "ai",
+      "model_score": 0.6175,
+      "style_score": 0.7373,
+      "combined_score": 0.6688,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "FP03  non-native speaker, accused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:11+00:00",
+      "content_id": "7576f060-9ea7-4ab7-9739-d8e30c98506c",
+      "creator_id": "attacker_FP03",
+      "guess": "ai",
+      "model_score": 0.8051,
+      "style_score": 0.7999,
+      "combined_score": 0.8025,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "FP05  technical docs by a person, accused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:12+00:00",
+      "content_id": "fc6871ae-3f0f-45e7-b8fa-dca0190743ab",
+      "creator_id": "attacker_FP05",
+      "guess": "ai",
+      "model_score": 0.8005,
+      "style_score": 0.8932,
+      "combined_score": 0.8417,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "PI05  attempted log injection, escaped",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:13+00:00",
+      "content_id": "77f61083-4631-4433-8cfc-8dff6532c148",
+      "creator_id": "attacker_PI05",
+      "guess": "human",
+      "model_score": 0.6401,
+      "style_score": 0.2163,
+      "combined_score": 0.3204,
+      "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "MF06  emoji only, accused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:14+00:00",
+      "content_id": "5d4ea71c-f66b-4578-adf7-6e026492d625",
+      "creator_id": "attacker_MF06",
+      "guess": "ai",
+      "model_score": 0.9969,
+      "style_score": 1.0,
+      "combined_score": 0.9984,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "MF07  Arabic text, accused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:15+00:00",
+      "content_id": "cb06c847-2904-4cdf-b9d8-d8304f555879",
+      "creator_id": "attacker_MF07",
+      "guess": "ai",
+      "model_score": 0.9064,
+      "style_score": 1.0,
+      "combined_score": 0.9479,
+      "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.",
+      "status": "decided"
+    }
+  },
+  {
+    "note": "FL01_xx  rate limit rejection, recorded not silent",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:15+00:00",
+      "creator_id": "attacker_flood",
+      "event": "rejected",
+      "status": "rejected",
+      "reason": "rate_limited",
+      "limit": "5 per 1 minute"
+    }
+  },
+  {
+    "note": "MF08  60,000 characters, refused",
+    "entry": {
+      "timestamp": "2026-11-05T17:10:15+00:00",
+      "creator_id": "attacker_MF08",
+      "event": "rejected",
+      "status": "rejected",
+      "reason": "text_too_long"
+    }
+  }
+]

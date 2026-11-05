@@ -612,23 +612,223 @@ And the body the caller gets back:
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+```bash
+$ python run_attacks.py --set ../attack_set --label before
+```
 
+56 attacks, 6 families. Nothing came back as a 500, a crash or a dropped
+connection, so `run_attacks.py` auto marked nothing and all 56 verdicts are
+mine. The full machine written record is in
+`results/attack_run_2026-11-05_1010_before.md`.
 
+**Totals: 37 held, 19 broke.**
+
+| Family | Attacks | Held | Broke |
+|---|---|---|---|
+| `evasion` | 10 | 1 | **9** |
+| `false_positive` | 8 | 1 | **7** |
+| `prompt_injection` | 6 | 6 | 0 |
+| `malformed` (text content) | 8 | 5 | **3** |
+| `malformed` (raw request bodies) | 12 | 12 | 0 |
+| `flood_same_creator` | 12 | 12 | 0 |
+
+**How I decided held or broke**, since the tool says this depends on my own
+thresholds and two students can honestly differ:
+
+- **evasion** breaks unless the label came back `ai`. I am counting `unsure` as
+  broken, and that is a deliberate reading. My own unsure label says "your post
+  stays exactly where it is and nothing about it has been reported to anyone",
+  so on a real site `unsure` means the generated text published with nothing
+  attached to it. That is the evasion working.
+- **false_positive** breaks when the label came back `ai`, because that is a
+  real writer being accused.
+- **prompt_injection** breaks if the submitted text changed my behaviour, my
+  label text, or my log. A high or low score is not an injection.
+- **malformed** breaks if it crashed, or if it produced a confident answer
+  about something my service had no business answering about.
+- **flood_same_creator** breaks if the burst was not stopped.
+
+### Every attack, with its outcome
+
+| ID | Family | Targeting | Status | Guess | model | style | conf | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| EV01 | evasion | typos raise word variety | 200 | human | 0.1635 | 0.6856 | 0.2679 | **BROKE** |
+| EV02 | evasion | broken up sentences raise length spread | 200 | unsure | 0.5943 | 0.3253 | 0.4164 | **BROKE** |
+| EV03 | evasion | a pasted quotation changes the shape | 200 | unsure | 0.6662 | 0.4942 | 0.5624 | **BROKE** |
+| EV04 | evasion | unusual words raise perplexity | 200 | unsure | 0.6114 | 0.6337 | 0.6223 | **BROKE** |
+| EV05 | evasion | heavy human editing pass | 200 | human | 0.3212 | 0.3038 | 0.3123 | **BROKE** |
+| EV06 | evasion | one very long sentence and one very short | 200 | unsure | 0.5727 | 0.4296 | 0.4889 | **BROKE** |
+| EV07 | evasion | padding with punctuation | 200 | unsure | 0.5862 | 0.4614 | 0.5145 | **BROKE** |
+| EV08 | evasion | text below the token window | 200 | human | 0.2452 | 0.7241 | 0.3470 | **BROKE** |
+| EV09 | evasion | AI text with a human opening bolted on | 200 | unsure | 0.7042 | 0.4849 | 0.5657 | **BROKE** |
+| EV10 | evasion | repeated stanza structure | 200 | ai | 0.9792 | 0.8606 | 0.9115 | HELD |
+| FP01 | false_positive | plain, clear human writing | 200 | ai | 0.6175 | 0.7373 | 0.6688 | **BROKE** |
+| FP02 | false_positive | human writing in a formal register | 200 | ai | 0.7387 | 0.8600 | 0.7905 | **BROKE** |
+| FP03 | false_positive | a non-native English speaker writing carefully | 200 | ai | 0.8051 | 0.7999 | 0.8025 | **BROKE** |
+| FP04 | false_positive | a student essay written to a rubric | 200 | ai | 0.8329 | 0.7091 | 0.7618 | **BROKE** |
+| FP05 | false_positive | technical documentation written by a person | 200 | ai | 0.8005 | 0.8932 | 0.8417 | **BROKE** |
+| FP06 | false_positive | a person imitating a formal template | 200 | ai | 0.8814 | 0.6815 | 0.7575 | **BROKE** |
+| FP07 | false_positive | human writing that repeats a phrase | 200 | ai | 0.8816 | 0.6125 | 0.7036 | **BROKE** |
+| FP08 | false_positive | very short genuine human submission | 400 | | | | | HELD † |
+| PI01 | prompt_injection | instruction to ignore the check | 200 | unsure | 0.4625 | 0.5071 | 0.4836 | HELD |
+| PI02 | prompt_injection | instruction disguised as a system message | 200 | human | 0.2044 | 0.4155 | 0.2832 | HELD |
+| PI03 | prompt_injection | instruction wrapped in the writer's voice | 200 | unsure | 0.5943 | 0.5515 | 0.5718 | HELD |
+| PI04 | prompt_injection | make the label text hostile | 200 | unsure | 0.4998 | 0.4253 | 0.4592 | HELD |
+| PI05 | prompt_injection | inject into the audit log | 200 | human | 0.6401 | 0.2163 | 0.3204 | HELD |
+| PI06 | prompt_injection | instruction plus real human text | 200 | unsure | 0.5583 | 0.7448 | 0.6307 | HELD |
+| MF01 | malformed | text is only whitespace | 400 | | | | | HELD |
+| MF02 | malformed | text is a single character | 400 | | | | | HELD |
+| MF03 | malformed | text is control characters | 400 | | | | | HELD |
+| MF04 | malformed | text is only punctuation | 400 | | | | | HELD |
+| MF05 | malformed | text is a very long single word | 200 | ai | 0.9976 | 0.8000 | 0.8754 | **BROKE** |
+| MF06 | malformed | text is emoji only | 200 | ai | 0.9969 | 1.0000 | 0.9984 | **BROKE** |
+| MF07 | malformed | text is right-to-left script | 200 | ai | 0.9064 | 1.0000 | 0.9479 | **BROKE** |
+| MF08 | malformed | text is 60,000 characters | 400 | | | | | HELD |
+| RQ01 | malformed | no text field at all | 400 | | | | | HELD |
+| RQ02 | malformed | no creator_id | 200 | unsure | 0.2395 | 0.8000 | 0.3516 | HELD ‡ |
+| RQ03 | malformed | text is a number | 400 | | | | | HELD |
+| RQ04 | malformed | text is a list | 400 | | | | | HELD |
+| RQ05 | malformed | text is null | 400 | | | | | HELD |
+| RQ06 | malformed | creator_id is an object | 400 | | | | | HELD § |
+| RQ07 | malformed | body is a JSON array, not an object | 400 | | | | | HELD |
+| RQ08 | malformed | body is unparseable JSON | 400 | | | | | HELD |
+| RQ09 | malformed | body is empty | 400 | | | | | HELD |
+| RQ10 | malformed | body is form-encoded, not JSON | 400 ¶ | | | | | HELD |
+| RQ11 | malformed | body is JSON claiming to be plain text | 400 ¶ | | | | | HELD |
+| RQ12 | malformed | deeply nested JSON | 400 | | | | | HELD |
+| FL01_01 | flood_same_creator | 20 rapid submissions from one creator | 200 | human | | | 0.183 | HELD |
+| FL01_02 | flood_same_creator | 20 rapid submissions from one creator | 200 | human | | | 0.183 | HELD |
+| FL01_03 | flood_same_creator | 20 rapid submissions from one creator | 200 | human | | | 0.183 | HELD |
+| FL01_04 | flood_same_creator | 20 rapid submissions from one creator | 200 | human | | | 0.183 | HELD |
+| FL01_05 | flood_same_creator | 20 rapid submissions from one creator | 200 | human | | | 0.183 | HELD |
+| FL01_06 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_07 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_08 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_09 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_10 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_11 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+| FL01_12 | flood_same_creator | 20 rapid submissions from one creator | 429 | | | | | HELD |
+
+**† FP08 held, and I am not comfortable calling it a pass.** The submission was
+`Went for a run. Legs hurt. Worth it.`, which is 36 characters of obviously
+genuine human writing. My `MIN_TEXT_CHARS = 40` check refused it with a 400. So
+it was not accused, which is what the false positive family was going for, and
+on that basis it held. But a real person writing a real short post gets turned
+away entirely, and because no decision was made there is no `content_id`, which
+means **there is nothing to appeal against.** Of the two ways my service can
+fail this writer, being silenced with no route back may be worse than being
+accused with one. It is in What's Still Broken.
+
+**‡ RQ02 held but logged the decision against `creator_id: "unknown"`.** The
+piece is still appealable, because an appeal needs a `content_id` and not a
+creator, so the writer is not stranded. But a decision that cannot be attributed
+to anybody is a decision I cannot count per creator later, and my rate limit
+quietly falls back to counting it per address.
+
+**§ RQ06 held for the wrong reason, which I only found by checking.** It sends
+`creator_id` as an object with `text` of 18 characters, and my length check
+refused it before the object ever reached my code. Sending the same body with
+longer text returns a 200 and writes the object straight into the audit log
+unvalidated. So this attack passed over a real gap rather than finding it, and I
+am recording that rather than taking the 400 as evidence of something I never
+tested.
+
+**¶ RQ10 and RQ11 came back 429 on the real run, which masked their outcome.**
+Both send bodies my key function cannot read a `creator_id` out of, so both fell
+back to the address key along with four other RQ rows, and the six of them ate
+each other's quota against my 5 per minute limit. A 429 there looks like a
+refusal by my handler and is nothing of the sort. I re-ran both against a second
+instance with `AI201_RATE_LIMITS=0` on port 5001 to get their true outcome,
+which is a clean 400 `missing_text` for each. The status column shows the true
+outcome and this note shows the method. **That masking is itself a finding:
+rate limiting and attack testing interfere, and if I had not checked I would
+have written down two wrong verdicts.**
 
 **Ten audit log entries from the run**
 
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
+Chosen because they show the mechanism, not because they are tidy.
 
 ```json
-
+{"timestamp": "2026-11-05T17:10:09+00:00", "content_id": "60be3445-42c2-4f6a-a01b-5fd061f87c67", "creator_id": "attacker_EV01", "guess": "human", "model_score": 0.1635, "style_score": 0.6856, "combined_score": 0.2679, "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:10+00:00", "content_id": "1cbf5dda-e730-46fc-9590-8a386b33bd01", "creator_id": "attacker_EV08", "guess": "human", "model_score": 0.2452, "style_score": 0.7241, "combined_score": 0.347, "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:11+00:00", "content_id": "fdae36fb-59ec-4d47-a962-e26f5596e97e", "creator_id": "attacker_EV10", "guess": "ai", "model_score": 0.9792, "style_score": 0.8606, "combined_score": 0.9115, "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:11+00:00", "content_id": "7576f060-9ea7-4ab7-9739-d8e30c98506c", "creator_id": "attacker_FP03", "guess": "ai", "model_score": 0.8051, "style_score": 0.7999, "combined_score": 0.8025, "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:12+00:00", "content_id": "fc6871ae-3f0f-45e7-b8fa-dca0190743ab", "creator_id": "attacker_FP05", "guess": "ai", "model_score": 0.8005, "style_score": 0.8932, "combined_score": 0.8417, "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:13+00:00", "content_id": "77f61083-4631-4433-8cfc-8dff6532c148", "creator_id": "attacker_PI05", "guess": "human", "model_score": 0.6401, "style_score": 0.2163, "combined_score": 0.3204, "label": "We checked this piece and found nothing that looks like computer writing. As far as we can tell, you wrote it yourself.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:14+00:00", "content_id": "5d4ea71c-f66b-4578-adf7-6e026492d625", "creator_id": "attacker_MF06", "guess": "ai", "model_score": 0.9969, "style_score": 1.0, "combined_score": 0.9984, "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:15+00:00", "content_id": "cb06c847-2904-4cdf-b9d8-d8304f555879", "creator_id": "attacker_MF07", "guess": "ai", "model_score": 0.9064, "style_score": 1.0, "combined_score": 0.9479, "label": "Our checks suggest this was written by a computer rather than by you. We can be wrong about this, and these checks cannot prove who wrote anything. If you wrote this yourself, tell us and a person will read it.", "status": "decided"}
+{"timestamp": "2026-11-05T17:10:15+00:00", "creator_id": "attacker_flood", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+{"timestamp": "2026-11-05T17:10:15+00:00", "creator_id": "attacker_MF08", "event": "rejected", "status": "rejected", "reason": "text_too_long"}
 ```
 
-**The single worst outcome** — the one I'd least want to explain to a writer
+The same ten, with the reason each one is here, are in
+`results/audit_extract.json`.
+
+What those entries show, reading down:
+
+1. **EV01 and EV08** are generated text that my service told the writer nobody
+   wrote by machine. Not uncertain. The confident human label. Look at the two
+   signal columns: `model_score` collapsed to 0.1635 and 0.2452 while
+   `style_score` stayed high at 0.6856 and 0.7241. One signal was still
+   suspicious and the answer came out human anyway.
+2. **EV10** is the contrast and the only evasion that held, with both signals
+   agreeing at 0.9792 and 0.8606.
+3. **FP03 and FP05** are a careful non-native speaker and a person writing
+   technical documentation, accused at 0.8025 and 0.8417.
+4. **PI05** tried to close my JSON and inject its own `"guess": "human"` and
+   `"combined_score": 0.01`. The log line parses as exactly one object and the
+   scores in it are mine, 0.6401 and 0.2163. The injection is sitting harmlessly
+   inside a string value, because `audit.py::_append` writes through
+   `json.dumps`, which escapes the quotes.
+5. **MF06 and MF07** both have `style_score` of exactly **1.0000**. Not 0.98,
+   not high, exactly the maximum. That is not a score, that is a default, and
+   finding it is what the whole run was for.
+6. **The last two** are refusals. They are in the log because a rejection that
+   leaves no trace is an attack I would never find. Thirteen rate limit
+   rejections and four content refusals were recorded across the run.
+
+**The single worst outcome**, the one I would least want to explain to a writer
 whose work got caught by it:
 
+**MF07.** It is 105 characters of Arabic, and my service answered with
+`"guess": "ai"` at 0.9479 and told the writer a computer wrote it.
 
+That is bad on its own. What makes it the worst thing in the run is the
+mechanism, which I went and checked rather than guessing at:
+
+```
+script             words found   spread     ttr   punct   style_signal
+English (plain)             26    0.176   0.731   0.000         0.8804
+Arabic                       0    0.000   0.000   0.000         1.0000
+Hebrew                       0    0.000   0.000   0.000         1.0000
+Chinese                      0    0.000   0.000   0.000         1.0000
+Japanese                     0    0.000   0.000   0.000         1.0000
+Korean                       0    0.000   0.000   0.000         1.0000
+Russian                      0    0.000   0.000   0.000         1.0000
+Hindi                        0    0.000   0.000   0.000         1.0000
+```
+
+`stylometry.py::words` is `re.findall(r"[a-z0-9']+", text.lower())`. It only
+matches the Latin alphabet. Give it any other script and it finds **zero
+words**, so all three of my measures return their empty value of 0.0, and my
+scaling in `stylometry.py::_to_ai_score` reads 0.0 as the far machine end of
+every one of them. The result is not an approximation. **My style signal returns
+exactly 1.0, the maximum possible accusation, for every writer who does not
+write in the Latin alphabet, before it has considered one thing about how they
+write.**
+
+The attack set found this with one Arabic sentence. Any of the other seven
+scripts above would have found it just as fast. That is most of the writing in
+the world.
+
+What I would have to say to that writer is that my service did not read their
+post, could not read their post, and accused them anyway, with more confidence
+than it had about anything a machine actually wrote. Nothing in my unit 7
+write up anticipated this. I spent that unit worrying about plain writing in
+English, which is real and is seven more rows of this table, and I never once
+asked what my own regular expression does to somebody writing in Arabic.
+
+This is what I am fixing in The Improvement.
 
 ---
 
