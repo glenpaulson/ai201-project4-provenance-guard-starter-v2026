@@ -1014,21 +1014,229 @@ agreeing with themselves proved something.
 
 **Diagnoses**
 
-<!-- For each miss AND each broken attack: the stage and the mechanism.
+One miss and 19 broken attacks. They are not 20 problems. They are **seven**,
+and they land on all five stages of my service.
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+| # | Stage | What goes wrong | Accounts for |
+|---|---|---|---|
+| 1 | signal two | returns the maximum accusation for text it cannot read | MF06, MF07 |
+| 2 | the route | never asks whether the input is writing at all | MF05, MF06, MF07 |
+| 3 | signal one **and** signal two | both reward plainness, so on plain human writing they agree and the lean has nothing to lean on | FP01 to FP07 |
+| 4 | signal two | counts punctuation and evenness as authorship | criterion 1 miss, and FP01, FP02, FP05 |
+| 5 | signal one **or** signal two, separately | either one can be moved on its own by a cheap edit that changes nothing about who wrote the text | EV01 to EV09 |
+| 6 | the combining rule | turns "I do not know" into "a person wrote this" when one signal has been fooled | EV01, EV08 |
+| 7 | the label mapping | cannot reorder a ranking that is already inverted | EV04, and all the rest |
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+---
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+### Diagnosis 1. Signal two hands out a maximum accusation for anything it cannot read
 
+**Stage:** signal two. **Accounts for:** MF06, MF07.
 
+`stylometry.py::words` is `re.findall(r"[a-z0-9']+", text.lower())`. It matches
+the Latin alphabet and nothing else. Hand it Arabic and it finds zero words.
+
+Zero words then walks through all three of my measures and comes out the far
+side as a confident accusation, because each measure has an empty case and I
+chose 0.0 for all three. `sentence_length_spread` gets fewer than two
+measurable sentences and returns 0.0. `type_token_ratio` has no words to divide
+and returns 0.0. `punctuation_density` divides by word count, finds none, and
+returns 0.0. Then `_to_ai_score` maps 0.0 against anchors whose machine ends are
+0.15, 0.60 and 0.02, so all three clamp to maximum machine likeness, and the
+weighted average of three 1.0s is 1.0.
+
+**The number is not a score. It is a default I never noticed I had written.**
+
+| script | words found | spread | ttr | punct | style_signal |
+|---|---|---|---|---|---|
+| English (plain) | 26 | 0.176 | 0.731 | 0.000 | 0.8804 |
+| Arabic | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Hebrew | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Chinese | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Japanese | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Korean | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Russian | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+| Hindi | 0 | 0.000 | 0.000 | 0.000 | **1.0000** |
+
+The attack set found this with one Arabic sentence. Any of the other seven
+would have done it. This is the one I am fixing.
+
+### Diagnosis 2. The route never asks whether the input is writing
+
+**Stage:** the route. **Accounts for:** MF05, MF06, MF07.
+
+`app.py::check_text` asks four questions: is `text` there, is it a string, is
+it empty, is it between 40 and 20,000 characters. Every one of those is about
+shape and none of them is about content. So 4,000 repetitions of the letter a
+(MF05), 200 emoji (MF06) and a sentence of Arabic (MF07) all sail through, and
+my service answers each with a confident accusation: 0.8754, 0.9984 and 0.9479.
+
+The deeper fault is that **nothing downstream of the route is allowed to say
+"I cannot judge this".** `model_signal` and `style_signal` both have to return a
+number between 0 and 1, and 1 means "machine wrote it". There is no value
+either of them can return that means "this is not something I can read", so
+when they cannot read something they are forced to express that as an
+accusation. That is a design mistake in my interface between the route and the
+signals, not a missing `if`.
+
+### Diagnosis 3. Both signals reward plainness, so on plain human writing they agree
+
+**Stage:** signal one and signal two together. **Accounts for:** FP01 to FP07,
+all seven false positives.
+
+Across the seven, the **mean model score is 0.7940 and the mean style score is
+0.7562**. Both high. In five of the seven, both signals were over my AI
+threshold of 0.65 on their own:
+
+| | model | style | both over 0.65 | combined |
+|---|---|---|---|---|
+| FP01 plain, clear human writing | 0.6175 | 0.7373 | | 0.6688 |
+| FP02 formal register | 0.7387 | 0.8600 | yes | 0.7905 |
+| FP03 non-native speaker | 0.8051 | 0.7999 | yes | 0.8025 |
+| FP04 student essay to a rubric | 0.8329 | 0.7091 | yes | 0.7618 |
+| FP05 technical documentation | 0.8005 | 0.8932 | yes | 0.8417 |
+| FP06 imitating a formal template | 0.8814 | 0.6815 | yes | 0.7575 |
+| FP07 repeats a phrase deliberately | 0.8816 | 0.6125 | | 0.7036 |
+
+The mechanism is the one I wrote down in unit 7 before I had measured anything,
+and it has now happened seven times. Signal one scores predictable word choices
+as machine like. Signal two scores even sentences and sparse punctuation as
+machine like. **Plain writing is both of those at once**, so my two signals do
+not give me two opinions about a plain writer. They give me the same opinion
+twice.
+
+That matters because of what my combining rule is for. It leans toward the
+kinder signal **when they disagree**. These seven agree, so there is nothing to
+lean on: the lean moved FP03 by 0.0000 and FP05 by 0.0051. My one protection
+for writers switches itself off for precisely the writers who need it.
+
+### Diagnosis 4. On my own writing, signal two accuses and signal one defends
+
+**Stage:** signal two. **Accounts for:** the criterion 1 miss, and FP01, FP02,
+FP05 within diagnosis 3.
+
+This is the same symptom as diagnosis 3, a real writer accused, from a
+different cause, and I nearly wrote it up as one thing. Across my own ten
+pieces the **model signal averages 0.3781 and the style signal averages
+0.6520**, the opposite way round from the FP family. Signal one reads my
+academic writing as human. Signal two is the only thing accusing me. They
+disagree in nine of the ten rows, and that disagreement is the only reason
+eight of them survived. The two that did not are the two where signal one
+drifted over 0.5 and stopped disagreeing hard enough to save me.
+
+What signal two is actually reacting to is punctuation, and two adjacent chunks
+of one paragraph prove it:
+
+| | optional marks | spread | style | combined | verdict |
+|---|---|---|---|---|---|
+| Piece 9, flowing prose | **2** | 0.262 | 0.9002 | 0.7343 | **ai** |
+| Piece 10, numbered list | **26** | 0.412 | 0.3857 | 0.3349 | human |
+
+Same author, same document, same sitting, consecutive sentences. `punctuation_
+density` carries weight 0.4 and `sentence_length_spread` another 0.4, so 24
+brackets and commas move 80% of signal two. **The thing my second signal
+measures most strongly is how often a writer reaches for a bracket.**
+
+### Diagnosis 5. Either signal can be moved on its own, cheaply
+
+**Stage:** signal one and signal two, separately. **Accounts for:** EV01 to
+EV09, all nine broken evasions.
+
+I first wrote this up as one fault in signal one, and the numbers say that is
+wrong. Going attack by attack and asking **which signal actually fell**:
+
+| ID | What was done to it | model | style | Which one fell | Aimed at |
+|---|---|---|---|---|---|
+| EV01 | typos added | **0.1635** | 0.6856 | signal one | signal two |
+| EV02 | sentences broken up | 0.5943 | **0.3253** | signal two | signal two |
+| EV03 | a quotation pasted in | 0.6662 | **0.4942** | signal two | signal two |
+| EV04 | unusual words | 0.6114 | 0.6337 | neither | signal one |
+| EV05 | a human editing pass | **0.3212** | **0.3038** | both | both |
+| EV06 | one very long and one very short sentence | 0.5727 | **0.4296** | signal two | signal two |
+| EV07 | padded with punctuation | 0.5862 | **0.4614** | signal two | signal two |
+| EV08 | cut below the token window | **0.2452** | 0.7241 | signal one | signal one |
+| EV09 | a human opening paragraph bolted on | 0.7042 | **0.4849** | signal two | both |
+
+**Signal one fell in three** (EV01, EV05, EV08). The mechanism is the one I
+measured in unit 7 without connecting it to anything: perplexity scores how
+easy text is to guess, anything slightly wrong is hard to guess, and hard to
+guess is what I score as human. Misspelling four words in a generated paragraph
+moved it from 0.8539 to 0.4915 back then. The attack set did the same thing and
+got 0.1635.
+
+**Signal two fell in six** (EV02, EV03, EV05, EV06, EV07, EV09). Every one of
+those six is a change to the *shape* of the text and not to a word of its
+substance: chop the sentences, paste in a quotation, add brackets, bolt a human
+paragraph on the front. Signal two cannot read, so it cannot tell the
+difference between prose that varies because a person wrote it and prose that
+varies because somebody pressed Enter a few times.
+
+**Two things follow that I did not expect.**
+
+First, **EV01 missed what it was aiming at and worked anyway.** Its `targets`
+column says *"signal two: typos raise word variety"*. Signal two barely moved
+and still said 0.6856, machine like. Signal one fell through the floor instead.
+Having two signals is supposed to mean an attacker has to beat both; here an
+attack aimed at one of them beat the other by accident.
+
+Second, **EV04 is the one that nothing fell on.** Model 0.6114 and style 0.6337,
+both perfectly respectable readings of "this looks machine written", and both
+sitting just under my AI line of 0.65. It did not defeat a signal. It defeated
+a number in `config.py`, which is diagnosis 7.
+
+### Diagnosis 6. The combining rule rewards fooling exactly one signal
+
+**Stage:** the combining rule. **Accounts for:** EV01 and EV08.
+
+I checked whether my lean caused the evasions to get through by recomputing
+every broken attack as a plain weighted average with no lean at all. **It
+changed the label on 2 of 19.** So the lean is not why the evasions worked, and
+I am not going to claim it is.
+
+But the two it changed, it made worse, and it made them worse in the exact way
+it was designed to be kind:
+
+| | gap | plain average | label | with my lean | label |
+|---|---|---|---|---|---|
+| EV01 | 0.522 | 0.4245 | unsure | **0.2679** | **human** |
+| EV08 | 0.479 | 0.4846 | unsure | **0.3470** | **human** |
+
+Both are generated text. Without the lean my service says "I could not tell".
+With it, my service tells the reader **"We checked this piece and found nothing
+that looks like computer writing. As far as we can tell, you wrote it
+yourself."** It stopped being uncertain and started vouching.
+
+The mechanism is that the lean grows with the size of the disagreement, and a
+big disagreement is exactly what you get when an attacker successfully fools one
+signal and not the other. **I wrote a rule that treats "one of my signals has
+been defeated" as evidence of innocence.** An attacker does not need to beat
+both signals. Beating one is better, because then my own rule finishes the job.
+
+### Diagnosis 7. The label mapping cannot reorder what the signals hand it
+
+**Stage:** the label mapping. **Accounts for:** EV04, and why none of the
+other eighteen can be fixed here either.
+
+I checked the obvious lever before planning anything, the same way I did in
+unit 7, and the answer is worse than it was then:
+
+| If the AI line is | evasions caught (of 9) | real writers still accused (of 7) |
+|---|---|---|
+| 0.65, what I ship | 0 | 7 |
+| 0.55 | 3 | 7 |
+| 0.50 | 4 | 7 |
+| 0.45 | 5 | 7 |
+
+The highest scoring broken evasion is **0.6223**. The lowest scoring false
+positive is **0.6688**. **Every single piece of machine written text that beat
+my service scored lower than every single real writer it accused.** Zero
+overlap, and the wrong way round.
+
+A threshold cuts a ranking somewhere. It cannot reorder one. Mine is not
+slightly miscalibrated, it is **inverted**: on this evidence my service is
+better at identifying careful human writing than machine writing, and it calls
+that identification an accusation. Nothing in `config.py` fixes that, which is
+why The Improvement is in `stylometry.py`.
 
 ---
 
